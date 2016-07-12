@@ -20,6 +20,7 @@ int main()
 	if(tmp)
 	{
 		printf(pdl_error(tmp));
+		system("pause");
 		return tmp;
 	}
 	
@@ -35,6 +36,7 @@ int main()
 	if(tmp)
 	{
 		printf(pdl_error(tmp));
+		system("pause");
 		return tmp;
 	}
 	if(!valid)
@@ -44,6 +46,7 @@ int main()
 		if(tmp)
 		{
 			printf(pdl_error(tmp));
+			system("pause");
 			return tmp;
 		}
 	}
@@ -65,6 +68,7 @@ int main()
 	if(tmp)
 	{
 		printf(pdl_error(tmp));
+		system("pause");
 		return tmp;
 	}
 	printf("Weight parameters load done...\n");
@@ -79,6 +83,7 @@ int main()
 		if(tmp)
 		{
 			printf(pdl_error(tmp));
+			system("pause");
 			return tmp;
 		}
 	}
