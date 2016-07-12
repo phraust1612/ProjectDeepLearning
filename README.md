@@ -9,7 +9,7 @@ to load more libraries.
 
 ==How to Use==
 
-0. Compiled program must be in the same directory with dataset(e.g. MNIST)
+Compiled program must be in the same directory with dataset(e.g. MNIST)
 1. Choose which set to train.
 2. Choose whether you want to use validate set or not.
 3. If so, choose which hyperparameter to validate.
