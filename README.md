@@ -6,3 +6,12 @@ and optimizes via gradient descent.
 The program only can read MNIST dataset,
 but you can add new functions at "dataread.cpp"
 to load more libraries.
+
+==How to Use==
+
+1. Choose which set to train.
+2. Choose whether you want to use validate set or not.
+3. If so, choose which hyperparameter to validate.
+4. Choose whether you want to start new, or load previous weights.
+5. During training, you can input some commends.
+6. Input Q for quit.
