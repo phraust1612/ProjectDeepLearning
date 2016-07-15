@@ -1,16 +1,10 @@
 #include "training.h"
-#include <math.h>
-
-CKeyinter Key;
-int cont, loaded;
-void KeyIntercept();
 
 CTraining::CTraining(CDataread* pD)
 {
 	pData = pD;
 	N = pData->N;
 	Nt = pData->Nt;
-	cont = 1;
 	loaded=0;
 	
 	alpha = 1;
@@ -27,13 +21,6 @@ CTraining::CTraining(CDataread* pD)
 CTraining::~CTraining()
 {
 	int i,j,k,u,v;
-	for(i=0; i<=alpha; i++)
-	{
-		free(s[i]);
-		free(delta[i]);
-	}
-	free(s);
-	free(delta);
 	for(i=0; i<alpha; i++)
 	{
 		for(j=0; j<D[i+1]; j++)
@@ -74,6 +61,7 @@ CTraining::~CTraining()
 int CTraining::WeightInit(int size)
 {
 	int i,j,k;
+	count = 0;
 	learningSize=size;
 	DELTA = DELTADEFAULT;
 	LAMBDA = LAMBDADEFAULT;
@@ -153,20 +141,18 @@ int CTraining::WeightLoad()
 	if(!DELTA) return ERR_CRACKED_FILE;
 	fread(&LAMBDA, sizeof(double), 1, fpWeight);
 	if(!LAMBDA) return ERR_CRACKED_FILE;
+	fread(&count, sizeof(int), 1, fpWeight);
 	fread(&learningSize, sizeof(int), 1, fpWeight);
-	if(learningSize)
-	{
-		fread(&l, sizeof(int), 1, fpWeight);
-		fread(&L, sizeof(double), 1, fpWeight);
-		fread(&Lold, sizeof(double), 1, fpWeight);
-		// scan W
-		for(i=0; i<alpha; i++)
-			for(j=0; j<D[i+1]; j++)
-				fread(dLdW[i][j], sizeof(double), D[i], fpWeight);
-		// scan b
-		for(i=0; i<alpha; i++)
-			fread(dLdb[i], sizeof(double), D[i+1], fpWeight);
-	}
+	fread(&l, sizeof(int), 1, fpWeight);
+	fread(&L, sizeof(double), 1, fpWeight);
+	fread(&Lold, sizeof(double), 1, fpWeight);
+	// scan W
+	for(i=0; i<alpha; i++)
+		for(j=0; j<D[i+1]; j++)
+			fread(dLdW[i][j], sizeof(double), D[i], fpWeight);
+	// scan b
+	for(i=0; i<alpha; i++)
+		fread(dLdb[i], sizeof(double), D[i+1], fpWeight);
 	fclose(fpWeight);
 	loaded=1;
 	
@@ -176,15 +162,6 @@ int CTraining::WeightLoad()
 void CTraining::ParamAllocate()
 {
 	int i,j,k,u;
-	// memory allocation of s, delta, etc
-	// s^(i+1) = W^i * delta^i * s^i + b^i
-	s = (double**) malloc(sizeof(double*) * (alpha+1));
-	delta = (bool**) malloc(sizeof(bool*) * (alpha+1));
-	for(i=0; i<=alpha; i++)
-	{
-		s[i] = (double*) malloc(sizeof(double) * D[i]);
-		delta[i] = (bool*) malloc(sizeof(bool) * D[i]);
-	}
 	
 	// dW[i][j][k][u][v] : ds^(i+1)_j / dW^k_u,v
 	// db[i][j][k][u] : ds^(i+1)_j / db^k_u
@@ -228,21 +205,23 @@ void CTraining::ParamAllocate()
 	}
 }
 
-void CTraining::Training()
+void CTraining::Training(int threads)
 {
 	int i,j,k,u,v,m,tmp;
 	double acc;
+	std::thread hThread[threads];
 	// Callback function starts to catch key inputs
 	Key = CKeyinter();
 	Key.Start();
-	Key.SetCallbackFunction(KeyIntercept);
+//	Key.SetCallbackFunction(KeyIntercept);
 	endtime=0;
 	double gap, Try;
 	int hr, min, sec;
+	bool cont = true;
 	starttime = clock();
 	ValidationParam valid;
 	
-	for(count=0; count<learningSize && cont; count++) 
+	for(;count<learningSize && cont; count++) 
 	{
 		// initializing dL/dW^i_j,k and dL/db^i_j
 		// I'm wondering if I have to memorize whole L_l
@@ -263,114 +242,44 @@ void CTraining::Training()
 		loaded = 0;
 		
 		// loop whose goal is to calculate gradient of L about each W,b
-		for(; l<N && cont; l++)	// l is an index for each picture
+		while(l<N && cont)	// l is an index for each picture
 		{
 			// if callback function catched character 's'
 			// save W,b parameters to a file
-			if(cont==2)
+			tmp = Key.keysave;
+			switch(tmp)
 			{
-				FileSave();
-				cont=1;
-				printf("save suceeded...\n>> ");
-			}
-			// if callback function catched character 'c'
-			// check current accuracy
-			if(cont==3)
-			{
-				printf("start testing procedure...\n");
-				acc = CheckAccuracy();
-				cont=1;
-				printf("accuracy : %2.2lf%%!!!\n>> ", acc);
-			}
-			if(cont==4)
-			{
-				ShowHelp();
-				cont=1;
-			}
-			if(cont==6)
-			{
-				printf("loop %2.2lf%%\n>> ", (double)(100*l)/N);
-				cont=1;
-			}
-			
-			// initializaing...
-			for(j=0; j<D[0] && cont; j++)
-			{
-				s[0][j] = pData->x[l][j];	// initializing sBef = x_l
-				delta[0][j] = 1;	// initializing first deltaBef
+				case 's':
+					FileSave();
+					Key.keysave = 'n';
+					printf("save suceeded...\n>> ");
+					break;
+				case 'c':
+					printf("start testing procedure...\n");
+					acc = CheckAccuracy();
+					Key.keysave = 'n';
+					printf("accuracy : %2.2lf%%!!!\n>> ", acc);
+					break;
+				case 'h':
+					ShowHelp();
+					Key.keysave = 'n';
+					break;
+				case 'p':
+					printf("loop %2.2lf%%\n>> ", (double)(100*l)/N);
+					Key.keysave = 'n';
+					break;
+				case 'q':
+					cont = false;
+					break;
+				default:
+					Key.keysave = 'n';
+					break;
 			}
 			
-			for(i=0; i<alpha && cont; i++)
-			{
-				// this loop is a procedure of score function
-				for(j=0; j<D[i+1] && cont; j++)
-				{
-					s[i+1][j] = 0;
-					// s^(i+1) = W^i * delta^i * s^i + b^i
-					for(k=0; k<D[i]; k++)
-						if(delta[i][k])
-							s[i+1][j] += W[i][j][k] * s[i][k];
-					s[i+1][j] += b[i][j];
-					//delta^i_j = 1 if s^i_j>0, 0 otherwise
-		//			if(i>=alpha-1) continue;	// because there is no delta[alpha] memory allocated
-					if(s[i+1][j] > 0) delta[i+1][j] = 1;
-					else delta[i+1][j] = 0;
-					
-					// loop for calculating gradient
-					for(k=0; k<i; k++)
-					{
-						for(u=0; u<D[k+1]; u++)
-						{
-							db[i][j][k][u] = 0;
-							for(v=0; v<D[i]; v++)
-							{
-								dW[i][j][k][u][v] = 0;
-								for(m=0; m<D[i]; m++)
-									if(delta[i][m]) dW[i][j][k][u][v] += W[i][j][m] * dW[i-1][m][k][u][v];
-							}
-							for(m=0; m<D[i]; m++)
-								if(delta[i][m]) db[i][j][k][u] += W[i][j][m] * db[i-1][m][k][u];
-						}
-					}
-
-					// for k=i-1, ds^(i+1)_j/dW^i_j,v = delta^i_k * s^i_k
-					// ds^(i+1)_j/db^i_j,v = 1
-					// otherwise 0
-					k=i;
-					for(u=0; u<D[k+1]; u++)
-					{
-						for(v=0; v<D[k]; v++)
-						{
-							if(u==j && delta[i][v]) dW[i][j][k][u][v] = s[i][v];
-							else dW[i][j][k][u][v] = 0;
-						}
-						if(u==j) db[i][j][k][u] = 1;
-						else db[i][j][k][u] = 0;
-					}
-				}
-			}
-			
-			// this is a procedure of calculating loss function
-			// according to SVM and its gradient about W,b
-			// L_l = sig_i
-			for(j=0; j<D[alpha]; j++)
-			{
-				if(j == pData->y[l]) continue;
-				if((tmp = s[alpha][j] - s[alpha][pData->y[l]] + DELTA) > 0)
-				{
-					L += tmp;
-					for(k=0; k<alpha; k++)
-					{
-						for(u=0; u<D[k+1]; u++)
-						{
-							for(v=0; v<D[k]; v++)
-								// applying L2 Regularization
-								dLdW[k][u][v] += dW[alpha-1][j][k][u][v] - dW[alpha-1][pData->y[l]][k][u][v];
-							dLdb[k][u] += db[alpha-1][j][k][u] - db[alpha-1][pData->y[l]][k][u];
-						}
-					}
-				}
-			}
+			// run multi-thread to calculate gradients
+			for(i=0; i<threads; i++) hThread[i] = std::thread(&CTraining::TrainingThreadFunc, this, l+i);
+			for(i=0; i<threads; i++) hThread[i].join();
+			l += threads;
 		}
 		
 		// L2 regularization
@@ -403,7 +312,6 @@ void CTraining::Training()
 			
 			printf("\nlearning procedure : %2.2lf%% done...\n", (double)(100 * (count+1))/(learningSize));
 			// show loss func and its difference
-			printf("general s = %lf\n", s[alpha][0]);
 			printf("L = %lf\n", L/N);
 			printf("increment of L = %lf\n", (L-Lold)/N);
 			Lold = L;
@@ -424,7 +332,7 @@ void CTraining::Training()
 			sec -= (int) min*60;
 			printf("estimated remaining time %d : %d : %d...\n>> ", hr, min, sec);
 		}
-		if(cont == 5)
+		/*if(cont == 5)
 		{
 			printf("to modify DELTA, input 1\n");
 			printf("to modify LAMBDA, input 2\n");
@@ -438,7 +346,7 @@ void CTraining::Training()
 			tmp = SetHyperparam(valid, Try);
 			if(tmp) printf("wrong query!!!\n");
 			cont=1;
-		}
+		}*/
 	}
 	Key.Stop();
 }
@@ -459,7 +367,8 @@ void CTraining::Training()
 //			8byte double	H
 //			8byte double	DELTA
 //			8byte double	LAMBDA
-//			4byte integer	learningSize(remaining)
+//			4byte integer	count
+//			4byte integer	learningsize
 //			4byte int		l (do not write behind if training ended)
 //			8byte double	L
 //			8byte double	Lold
@@ -481,19 +390,15 @@ void CTraining::FileSave()
 	fwrite(&H, sizeof(double), 1, fpResult);
 	fwrite(&DELTA, sizeof(double), 1, fpResult);
 	fwrite(&LAMBDA, sizeof(double), 1, fpResult);
-	i = learningSize - count;	// temporary learningSize to save without influencing current process
-	if(!cont) i++;
-	fwrite(&i, sizeof(int), 1, fpResult);	// learningSize
-	if(i)
-	{
-		fwrite(&l, sizeof(int), 1, fpResult);
-		fwrite(&L, sizeof(double), 1, fpResult);
-		fwrite(&Lold, sizeof(double), 1, fpResult);
-		for(i=0; i<alpha; i++)
-			for(j=0; j<D[i+1]; j++)
-				fwrite(dLdW[i][j], sizeof(double), D[i], fpResult);
-		for(i=0; i<alpha; i++) fwrite(dLdb[i], sizeof(double), D[i+1], fpResult);
-	}
+	fwrite(&count, sizeof(int), 1, fpResult);
+	fwrite(&learningSize, sizeof(int), 1, fpResult);
+	fwrite(&l, sizeof(int), 1, fpResult);
+	fwrite(&L, sizeof(double), 1, fpResult);
+	fwrite(&Lold, sizeof(double), 1, fpResult);
+	for(i=0; i<alpha; i++)
+		for(j=0; j<D[i+1]; j++)
+			fwrite(dLdW[i][j], sizeof(double), D[i], fpResult);
+	for(i=0; i<alpha; i++) fwrite(dLdb[i], sizeof(double), D[i+1], fpResult);
 	fclose(fpResult);
 }
 
@@ -591,30 +496,103 @@ void CTraining::ShowHelp()
 	printf("enter h whenever you want to read this help message again\n>> ");
 }
 
-void KeyIntercept()
+void CTraining::TrainingThreadFunc(int l)
 {
-	int temp = Key.keysave;
-	switch(temp)
+	int i,j,k,u,v,m,tmp;
+	// memory allocation of s, delta, etc
+	// s^(i+1) = W^i * delta^i * s^i + b^i
+	double** s = (double**) malloc(sizeof(double*) * (alpha+1));
+	// this delta is a deltachronical matrix, used at ReLU
+	bool** delta = (bool**) malloc(sizeof(bool*) * (alpha+1));
+	for(i=0; i<=alpha; i++)
 	{
-		case 'q':
-			cont=0;
-			break;
-		case 's':
-			cont=2;
-			break;
-		case 'c':
-			cont=3;
-			break;
-		case 'h':
-			cont=4;
-			break;
-		case 'm':
-			cont=5;
-			break;
-		case 'p':
-			cont=6;
-			break;
-		default:
-			break;
+		s[i] = (double*) malloc(sizeof(double) * D[i]);
+		delta[i] = (bool*) malloc(sizeof(bool) * D[i]);
 	}
+	
+	// initializaing...
+	for(j=0; j<D[0]; j++)
+	{
+		s[0][j] = pData->x[l][j];	// initializing sBef = x_l
+		delta[0][j] = 1;	// initializing first deltaBef
+	}
+	
+	for(i=0; i<alpha; i++)
+	{
+		// this loop is a procedure of score function
+		for(j=0; j<D[i+1]; j++)
+		{
+			s[i+1][j] = 0;
+			// s^(i+1) = W^i * delta^i * s^i + b^i
+			for(k=0; k<D[i]; k++)
+				if(delta[i][k])
+					s[i+1][j] += W[i][j][k] * s[i][k];
+			s[i+1][j] += b[i][j];
+			//delta^i_j = 1 if s^i_j>0, 0 otherwise
+//			if(i>=alpha-1) continue;	// because there is no delta[alpha] memory allocated
+			if(s[i+1][j] > 0) delta[i+1][j] = 1;
+			else delta[i+1][j] = 0;
+			
+			// loop for calculating gradient
+			for(k=0; k<i; k++)
+			{
+				for(u=0; u<D[k+1]; u++)
+				{
+					db[i][j][k][u] = 0;
+					for(v=0; v<D[i]; v++)
+					{
+						dW[i][j][k][u][v] = 0;
+						for(m=0; m<D[i]; m++)
+							if(delta[i][m]) dW[i][j][k][u][v] += W[i][j][m] * dW[i-1][m][k][u][v];
+					}
+					for(m=0; m<D[i]; m++)
+						if(delta[i][m]) db[i][j][k][u] += W[i][j][m] * db[i-1][m][k][u];
+				}
+			}
+				// for k=i-1, ds^(i+1)_j/dW^i_j,v = delta^i_k * s^i_k
+			// ds^(i+1)_j/db^i_j,v = 1
+			// otherwise 0
+			k=i;
+			for(u=0; u<D[k+1]; u++)
+			{
+				for(v=0; v<D[k]; v++)
+				{
+					if(u==j && delta[i][v]) dW[i][j][k][u][v] = s[i][v];
+					else dW[i][j][k][u][v] = 0;
+				}
+				if(u==j) db[i][j][k][u] = 1;
+				else db[i][j][k][u] = 0;
+			}
+		}
+	}
+	
+	// this is a procedure of calculating loss function
+	// according to SVM and its gradient about W,b
+	// L_l = sig_i
+	for(j=0; j<D[alpha]; j++)
+	{
+		if(j == pData->y[l]) continue;
+		if((tmp = s[alpha][j] - s[alpha][pData->y[l]] + DELTA) > 0)
+		{
+			L += tmp;
+			for(k=0; k<alpha; k++)
+			{
+				for(u=0; u<D[k+1]; u++)
+				{
+					for(v=0; v<D[k]; v++)
+						// applying L2 Regularization
+						dLdW[k][u][v] += dW[alpha-1][j][k][u][v] - dW[alpha-1][pData->y[l]][k][u][v];
+					dLdb[k][u] += db[alpha-1][j][k][u] - db[alpha-1][pData->y[l]][k][u];
+				}
+			}
+		}
+	}
+	
+	for(i=0; i<=alpha; i++)
+	{
+		free(s[i]);
+		free(delta[i]);
+	}
+	free(s);
+	free(delta);
 }
