@@ -87,10 +87,15 @@ int main()
 			return tmp;
 		}
 	}
+	
+	printf("how many threads do you want to set?\n>> ");
+	scanf("%d", &tmp);
+	getchar();
+	
 	// start training
 	printf("start learning procedure...\n");
 	hTrain.ShowHelp();
-	hTrain.Training();
+	hTrain.Training(tmp);
 	
 	// save trained parameters
 	printf("learning ended...\n");
@@ -99,8 +104,6 @@ int main()
 	// free memories
 	// hTrain.~CTraining();
 	printf("end of the programm!!\n");
-	
-	system("pause");
 	return 0;
 }
 
