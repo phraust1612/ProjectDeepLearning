@@ -21,7 +21,7 @@ private:
 	int alpha, N, Nt, *D, count, l, learningSize, loaded;
 	// H, DELTA, LAMBDA are hyperparameters
 	// dW, db each stands for ds/dW, ds/db matrices
-	double H, ***W, **b, *****dW, ***dLdW, ****db, **dLdb, L, Lold, DELTA, LAMBDA;
+	double H, ***W, **b, ***dLdW, **dLdb, L, Lold, DELTA, LAMBDA;
 	time_t starttime, endtime;
 	CDataread *pData;
 	void ParamAllocate();
