@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include "training.h"
 #include "dataread.h"
-#define VERSION		 1.4
+#define VERSION		 1.5
 const char* pdl_error(int Err);
 
 int main()
