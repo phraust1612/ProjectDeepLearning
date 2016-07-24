@@ -37,24 +37,6 @@ CTraining::~CTraining()
 	free(dLdW);
 	free(b);
 	free(dLdb);
-	for(i=0; i<alpha; i++)
-	{
-		for(j=0; j<D[i]; j++)
-		{
-			for(k=0; k<i; k++)
-			{
-				for(u=0; u<D[k+1]; u++) free(dW[i][j][k][u]);
-				free(dW[i][j][k]);
-				free(db[i][j][k]);
-			}
-			free(dW[i][j]);
-			free(db[i][j]);
-		}
-		free(dW[i]);
-		free(db[i]);
-	}
-	free(dW);
-	free(db);
 	free(D);
 }
 
@@ -162,27 +144,6 @@ int CTraining::WeightLoad()
 void CTraining::ParamAllocate()
 {
 	int i,j,k,u;
-	
-	// dW[i][j][k][u][v] : ds^(i+1)_j / dW^k_u,v
-	// db[i][j][k][u] : ds^(i+1)_j / db^k_u
-	dW = (double*****) malloc(sizeof(double****) * alpha);
-	db = (double****) malloc(sizeof(double***) * alpha);
-	for(i=0; i<alpha; i++)
-	{
-		dW[i] = (double****) malloc(sizeof(double***) * D[i]);
-		db[i] = (double***) malloc(sizeof(double**) * D[i]);
-		for(j=0; j<D[i]; j++)
-		{
-			dW[i][j] = (double***) malloc(sizeof(double**) * (i+1));
-			db[i][j] = (double**) malloc(sizeof(double*) * (i+1));
-			for(k=0; k<=i; k++)
-			{
-				dW[i][j][k] = (double**) malloc(sizeof(double*) * D[k+1]);
-				db[i][j][k] = (double*) malloc(sizeof(double) * D[k+1]);
-				for(u=0; u<D[k+1]; u++) dW[i][j][k][u] = (double*) malloc(sizeof(double) * D[k]);
-			}
-		}
-	}
 	
 	// dLdW[i][j][k] : dL / dW^i_j,k
 	// dLdb[i][j] : dL / db^i_j
@@ -502,6 +463,11 @@ void CTraining::TrainingThreadFunc(int l)
 	// memory allocation of s, delta, etc
 	// s^(i+1) = W^i * delta^i * s^i + b^i
 	double** s = (double**) malloc(sizeof(double*) * (alpha+1));
+	// dW[m][i][j][k] : ds^alpha_i / dW^m_j,k
+	double**** dW = (double****) malloc(sizeof(double***) * alpha);
+	// db[m][i][j] : ds^alpha_i / db^m_j
+	// and this is exactly same as ds^alpha_i / ds^(m+1)_j mathematically
+	double*** db = (double***) malloc(sizeof(double**) * alpha);
 	// this delta is a deltachronical matrix, used at ReLU
 	bool** delta = (bool**) malloc(sizeof(bool*) * (alpha+1));
 	for(i=0; i<=alpha; i++)
@@ -509,17 +475,28 @@ void CTraining::TrainingThreadFunc(int l)
 		s[i] = (double*) malloc(sizeof(double) * D[i]);
 		delta[i] = (bool*) malloc(sizeof(bool) * D[i]);
 	}
+	for(m=0; m<alpha; m++)
+	{
+		dW[m] = (double***) malloc(sizeof(double**) * D[alpha]);
+		db[m] = (double**) malloc(sizeof(double*) * D[alpha]);
+		for(i=0; i<D[alpha]; i++)
+		{
+			dW[m][i] = (double**) malloc(sizeof(double*) * D[m+1]);
+			db[m][i] = (double*) malloc(sizeof(double) * D[m+1]);
+			for(j=0; j<D[m+1]; j++) dW[m][i][j] = (double*) malloc(sizeof(double) * D[m]);
+		}
+	}
 	
-	// initializaing...
+	// initialize score function and delta chronicle
 	for(j=0; j<D[0]; j++)
 	{
 		s[0][j] = pData->x[l][j];	// initializing sBef = x_l
 		delta[0][j] = 1;	// initializing first deltaBef
 	}
 	
+	// this loop is a procedure of score function
 	for(i=0; i<alpha; i++)
 	{
-		// this loop is a procedure of score function
 		for(j=0; j<D[i+1]; j++)
 		{
 			s[i+1][j] = 0;
@@ -532,36 +509,45 @@ void CTraining::TrainingThreadFunc(int l)
 //			if(i>=alpha-1) continue;	// because there is no delta[alpha] memory allocated
 			if(s[i+1][j] > 0) delta[i+1][j] = 1;
 			else delta[i+1][j] = 0;
+		}
+	}
+	
+	// initialize db and dW (for the case m=alpha-1)
+	for(i=0; i<D[alpha]; i++)
+	{
+		for(j=0; j<D[alpha]; j++)
+		{
+			// ds^alpha_i / db^(alpha-1)_j = 1 if and only if i=j
+			// otherwise it becomes 0
+			if(i==j) db[alpha-1][i][j] = 1;
+			else db[alpha-1][i][j] = 0;
 			
-			// loop for calculating gradient
-			for(k=0; k<i; k++)
+			for(k=0; k<D[alpha-1]; k++)
+				if(delta[alpha-1][k])
+					dW[alpha-1][i][j][k] = db[alpha-1][i][j] * s[alpha-1][k];
+		}
+	}
+	
+	// calculating gradient for b,W in general
+	for(m=alpha-2; m>=0; m++)
+	{
+		for(i=0; i<D[alpha]; i++)
+		{
+			for(j=0; j<D[m+1]; j++)
 			{
-				for(u=0; u<D[k+1]; u++)
+				// compute ds^alpha_i / db^m_j
+				// check up my blog for detail about how this comes
+				db[m][i][j] = 0;
+				if(delta[m+1][j])
+					for(k=0; k<D[m+2]; k++)
+						db[m][i][j] += db[m+1][i][k] * W[m+1][k][j];
+						
+				// compute ds^alpha_i / dW^m_j,k
+				for(k=0; k<D[m]; k++)
 				{
-					db[i][j][k][u] = 0;
-					for(v=0; v<D[i]; v++)
-					{
-						dW[i][j][k][u][v] = 0;
-						for(m=0; m<D[i]; m++)
-							if(delta[i][m]) dW[i][j][k][u][v] += W[i][j][m] * dW[i-1][m][k][u][v];
-					}
-					for(m=0; m<D[i]; m++)
-						if(delta[i][m]) db[i][j][k][u] += W[i][j][m] * db[i-1][m][k][u];
+					if(delta[m][k]) dW[m][i][j][k] = db[m][i][j] * s[m][k];
+					else dW[m][i][j][k] = 0;
 				}
-			}
-				// for k=i-1, ds^(i+1)_j/dW^i_j,v = delta^i_k * s^i_k
-			// ds^(i+1)_j/db^i_j,v = 1
-			// otherwise 0
-			k=i;
-			for(u=0; u<D[k+1]; u++)
-			{
-				for(v=0; v<D[k]; v++)
-				{
-					if(u==j && delta[i][v]) dW[i][j][k][u][v] = s[i][v];
-					else dW[i][j][k][u][v] = 0;
-				}
-				if(u==j) db[i][j][k][u] = 1;
-				else db[i][j][k][u] = 0;
 			}
 		}
 	}
@@ -569,25 +555,38 @@ void CTraining::TrainingThreadFunc(int l)
 	// this is a procedure of calculating loss function
 	// according to SVM and its gradient about W,b
 	// L_l = sig_i
-	for(j=0; j<D[alpha]; j++)
+	for(i=0; i<D[alpha]; i++)
 	{
-		if(j == pData->y[l]) continue;
-		if((tmp = s[alpha][j] - s[alpha][pData->y[l]] + DELTA) > 0)
+		if(i == pData->y[l]) continue;
+		if((tmp = s[alpha][i] - s[alpha][pData->y[l]] + DELTA) > 0)
 		{
 			L += tmp;
-			for(k=0; k<alpha; k++)
+			for(m=0; m<alpha; m++)
 			{
-				for(u=0; u<D[k+1]; u++)
+				for(j=0; j<D[m+1]; j++)
 				{
-					for(v=0; v<D[k]; v++)
-						// applying L2 Regularization
-						dLdW[k][u][v] += dW[alpha-1][j][k][u][v] - dW[alpha-1][pData->y[l]][k][u][v];
-					dLdb[k][u] += db[alpha-1][j][k][u] - db[alpha-1][pData->y[l]][k][u];
+					for(k=0; k<D[m]; k++)
+						dLdW[m][j][k] += dW[m][i][j][k] - dW[m][pData->y[l]][j][k];
+					dLdb[m][j] += db[m][i][j] - db[m][pData->y[l]][j];
 				}
 			}
 		}
 	}
 	
+	// free memories used at this thread
+	for(m=0; m<alpha; m++)
+	{
+		for(i=0; i<D[alpha]; i++)
+		{
+			for(j=0; j<D[m+1]; j++) free(dW[m][i][j]);
+			free(dW[m][i]);
+			free(db[m][i]);
+		}
+		free(dW[m]);
+		free(db[m]);
+	}
+	free(dW);
+	free(db);
 	for(i=0; i<=alpha; i++)
 	{
 		free(s[i]);
