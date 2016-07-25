@@ -1,5 +1,8 @@
 #ifndef _KEYINTER_H
 #define _KEYINTER_H
+#include <process.h>
+#include <windows.h>
+#include <stdio.h>
 
 typedef void (*pfCallback)();
 
