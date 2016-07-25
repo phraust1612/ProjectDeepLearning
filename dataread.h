@@ -21,7 +21,7 @@ class CDataread
 private:
 	int row, col;
 	FileSetMode mode;
-	int ReadMNISTTrainingSet(ValidationParam validateMode);
+	int ReadMNISTTrainingSet(int validateMode);
 	int ReadMNISTTestSet();
 public:
 	double **x, **xt;
@@ -30,7 +30,7 @@ public:
 	CDataread();
 	~CDataread();
 	int SetMode(FileSetMode mod);
-	int ReadTrainingSet(ValidationParam validateMode);
+	int ReadTrainingSet(int validateMode);
 	int ReadTestSet();
 };
 #endif
