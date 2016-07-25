@@ -37,7 +37,7 @@ int CDataread::SetMode(FileSetMode mod)
 	else return 1;
 }
 
-int CDataread::ReadTrainingSet(ValidationParam validateMode)
+int CDataread::ReadTrainingSet(int validateMode)
 {
 	switch(mode)
 	{
@@ -63,7 +63,7 @@ int CDataread::ReadTestSet()
 // if validateMode=1, load training set as validate set for 10%,
 // and use last 90% for training set
 // in this case, do not use test set
-int CDataread::ReadMNISTTrainingSet(ValidationParam validateMode)
+int CDataread::ReadMNISTTrainingSet(int validateMode)
 {
 	//if((validateMode!=0) && (validateMode!=1)) return ERR_UNAPPROPRIATE_INPUT;
 	int i,j,tmp;
