@@ -1,7 +1,4 @@
 #include "keyinter.h"
-#include <process.h>
-#include <windows.h>
-#include <stdio.h>
 
 void CallbackFunc(void *vp);
 
@@ -9,7 +6,7 @@ CKeyinter::CKeyinter()
 {
 	bStop = TRUE;
 	m_cb = NULL;
-	keysave = (int)'c';
+	keysave = (int)'n';
 }
 
 CKeyinter::~CKeyinter(){}
