@@ -9,9 +9,12 @@ int main()
 {
 	printf("DeepLearning ver %1.1f start\n", VERSION);
 	int tmp;
+	double Try;
 	FileSetMode filemode;
 	ValidationParam valid;
 	CDataread hData = CDataread();
+	
+	// step 1 : choose which dataset to use
 	printf("MNIST : 1\n");
 	printf(">> ");
 	scanf("%d", &filemode);
@@ -24,15 +27,13 @@ int main()
 		return tmp;
 	}
 	
-	printf("to validate DELTA, input 1\n");
-	printf("to validate LAMBDA, input 2\n");
-	printf("to validate H, input 3\n");
-	printf("not to make validation set, input 0\n");
-	printf(">> ");
-	scanf("%d", &valid);
+	// step 2 : choose whether use validation set or not
+	printf("to use validation set, input 1\n");
+	printf("otherwise input 0\n>> ");
+	scanf("%d", &tmp);
 	getchar();
 	printf("loading training set...\n");
-	tmp = hData.ReadTrainingSet(valid);
+	tmp = hData.ReadTrainingSet(tmp);
 	if(tmp)
 	{
 		printf(pdl_error(tmp));
@@ -54,6 +55,7 @@ int main()
 	
 	CTraining hTrain = CTraining(&hData);
 	
+	// step 3 : choose whether load previous weights or not
 	// if inputs 1, load saved data of W and b
 	// otherwise user inputs each dimension of layers
 	// and randomly choose variables of W and b
@@ -73,10 +75,18 @@ int main()
 	}
 	printf("Weight parameters load done...\n");
 	
-	if(valid!=None)
+	// step 4 : choose whetherinput your own hyperparameter values or not
+	valid = None;
+	while(true)
 	{
-		printf("input trial hyperparam value\n>> ");
-		double Try;
+		printf("to validate DELTA, input 1\n");
+		printf("to validate LAMBDA, input 2\n");
+		printf("to validate H, input 3\n");
+		printf("to start, input 0\n>> ");
+		scanf("%d", &valid);
+		getchar();
+		if(valid == None) break;
+		printf("input your hyperparam value\n>> ");
 		scanf("%lf", &Try);
 		getchar();
 		tmp = hTrain.SetHyperparam(valid, Try);
@@ -88,11 +98,13 @@ int main()
 		}
 	}
 	
+	// step 5 : choose how many threads you're gonna use
 	printf("how many threads do you want to set?\n>> ");
 	scanf("%d", &tmp);
 	getchar();
 	
-	// start training
+	// step 6 : start training
+	// input q to quit or other commands
 	printf("start learning procedure...\n");
 	hTrain.ShowHelp();
 	hTrain.Training(tmp);
