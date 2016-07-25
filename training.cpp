@@ -120,9 +120,7 @@ int CTraining::WeightLoad()
 	fread(&H, sizeof(double), 1, fpWeight);
 	if(!H) return ERR_CRACKED_FILE;
 	fread(&DELTA, sizeof(double), 1, fpWeight);
-	if(!DELTA) return ERR_CRACKED_FILE;
 	fread(&LAMBDA, sizeof(double), 1, fpWeight);
-	if(!LAMBDA) return ERR_CRACKED_FILE;
 	fread(&count, sizeof(int), 1, fpWeight);
 	fread(&learningSize, sizeof(int), 1, fpWeight);
 	fread(&l, sizeof(int), 1, fpWeight);
@@ -168,22 +166,21 @@ void CTraining::ParamAllocate()
 
 void CTraining::Training(int threads)
 {
-	int i,j,k,u,v,m,tmp;
-	double acc;
+	int i,j,k,u,v,m,tmp,hr,min,sec;
+	time_t starttime, endtime;
+	double gap, Try, acc;
+	bool cont = true;
 	std::thread hThread[threads];
 	// Callback function starts to catch key inputs
 	Key = CKeyinter();
 	Key.Start();
 //	Key.SetCallbackFunction(KeyIntercept);
 	endtime=0;
-	double gap, Try;
-	int hr, min, sec;
-	bool cont = true;
-	starttime = clock();
 	ValidationParam valid;
 	
 	for(;count<learningSize && cont; count++) 
 	{
+		starttime = clock();
 		// initializing dL/dW^i_j,k and dL/db^i_j
 		// I'm wondering if I have to memorize whole L_l
 		// so I'll just accumulate all gradient
@@ -286,28 +283,13 @@ void CTraining::Training(int threads)
 			min = (int) sec/60;
 			sec -= (int) min*60;
 			printf("costed about %d : %d : %d time...\n", hr, min, sec);
-			sec = (int) gap*(learningSize - count-1)/(count+1);
-				hr = (int) sec/3600;
+			sec = (int) gap*(learningSize - count-1);
+			hr = (int) sec/3600;
 			sec -= (int) hr*3600;
 			min = (int) sec/60;
 			sec -= (int) min*60;
 			printf("estimated remaining time %d : %d : %d...\n>> ", hr, min, sec);
 		}
-		/*if(cont == 5)
-		{
-			printf("to modify DELTA, input 1\n");
-			printf("to modify LAMBDA, input 2\n");
-			printf("to modify H, input 3\n>> ");
-			scanf("%d", &valid);
-			getchar();
-			
-			printf("input trial hyperparam value\n>> ");
-			scanf("%lf", &Try);
-			getchar();
-			tmp = SetHyperparam(valid, Try);
-			if(tmp) printf("wrong query!!!\n");
-			cont=1;
-		}*/
 	}
 	Key.Stop();
 }
@@ -453,7 +435,6 @@ void CTraining::ShowHelp()
 	printf("enter c whenever you want to check accuracy\n");
 	printf("enter s whenever you want to save\n");
 	printf("enter q whenever you want to quit the program\n");
-	printf("enter m whenever you want to modify hyperparameters\n");
 	printf("enter h whenever you want to read this help message again\n>> ");
 }
 
@@ -475,6 +456,7 @@ void CTraining::TrainingThreadFunc(int l)
 		s[i] = (double*) malloc(sizeof(double) * D[i]);
 		delta[i] = (bool*) malloc(sizeof(bool) * D[i]);
 	}
+	
 	for(m=0; m<alpha; m++)
 	{
 		dW[m] = (double***) malloc(sizeof(double**) * D[alpha]);
@@ -529,7 +511,7 @@ void CTraining::TrainingThreadFunc(int l)
 	}
 	
 	// calculating gradient for b,W in general
-	for(m=alpha-2; m>=0; m++)
+	for(m=alpha-2; m>=0; m--)
 	{
 		for(i=0; i<D[alpha]; i++)
 		{
