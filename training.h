@@ -9,8 +9,8 @@
 #include <stdlib.h>
 #include <thread>
 #define DELTADEFAULT	1.0
-#define LAMBDADEFAULT	0.003
-#define HDEFAULT		0.0001
+#define LAMBDADEFAULT	0.001
+#define HDEFAULT		0.001
 
 
 class CTraining
@@ -22,7 +22,6 @@ private:
 	// H, DELTA, LAMBDA are hyperparameters
 	// dW, db each stands for ds/dW, ds/db matrices
 	double H, ***W, **b, ***dLdW, **dLdb, L, Lold, DELTA, LAMBDA;
-	time_t starttime, endtime;
 	CDataread *pData;
 	void ParamAllocate();
 	CKeyinter Key;
