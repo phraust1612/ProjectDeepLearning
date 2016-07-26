@@ -166,7 +166,7 @@ void CTraining::ParamAllocate()
 
 void CTraining::Training(int threads)
 {
-	int i,j,k,u,v,m,tmp,hr,min,sec;
+	int i,j,k,u,v,m,tmp,hr,min,sec,startindexl,startindexcount;
 	time_t starttime, endtime;
 	double gap, Try, acc;
 	bool cont = true;
@@ -174,13 +174,14 @@ void CTraining::Training(int threads)
 	// Callback function starts to catch key inputs
 	Key = CKeyinter();
 	Key.Start();
-//	Key.SetCallbackFunction(KeyIntercept);
 	endtime=0;
 	ValidationParam valid;
+	startindexl = l;
+	startindexcount = count;
+	starttime = clock();
 	
 	for(;count<learningSize && cont; count++) 
 	{
-		starttime = clock();
 		// initializing dL/dW^i_j,k and dL/db^i_j
 		// I'm wondering if I have to memorize whole L_l
 		// so I'll just accumulate all gradient
@@ -210,23 +211,48 @@ void CTraining::Training(int threads)
 				case 's':
 					FileSave();
 					Key.keysave = 'n';
-					printf("save suceeded...\n>> ");
+					printf("\nsave suceeded...");
 					break;
 				case 'c':
-					printf("start testing procedure...\n");
+					printf("\nstart testing procedure...");
 					acc = CheckAccuracy();
 					Key.keysave = 'n';
-					printf("accuracy : %2.2lf%%!!!\n>> ", acc);
+					printf("\naccuracy : %2.2lf%%!!!", acc);
 					break;
 				case 'h':
 					ShowHelp();
 					Key.keysave = 'n';
 					break;
 				case 'p':
-					printf("loop %2.2lf%%\n>> ", (double)(100*l)/N);
 					Key.keysave = 'n';
+					// compute just proceed and I won't declare any other variables
+					acc = (double) (l - startindexl + N * (count - startindexcount));
+					acc /= (double) (N * learningSize);
+					printf("\nlearning procedure : %2.2lf%% done...\n", 100 * acc);
+					
+					// show expected time
+					endtime = clock();
+					gap = (double) (endtime - starttime)/(CLOCKS_PER_SEC);
+					sec = (int) gap;
+					hr = (int) sec/3600;
+					sec -= (int) hr*3600;
+					min = (int) sec/60;
+					sec -= (int) min*60;
+					printf("costed about %d : %d : %d time...\n", hr, min, sec);
+					// acc : Try = costed : remained
+					acc = (double) (l - startindexl + N * (count - startindexcount));
+					Try = (double) (N - l + N * (learningSize - count - 1));
+					if(acc!=0) Try /= acc;
+					else break;
+					sec = (int) gap * Try;
+					hr = (int) sec/3600;
+					sec -= (int) hr*3600;
+					min = (int) sec/60;
+					sec -= (int) min*60;
+					printf("estimated remaining time %d : %d : %d...", hr, min, sec);
 					break;
 				case 'q':
+					printf("\n");
 					cont = false;
 					break;
 				default:
@@ -268,27 +294,10 @@ void CTraining::Training(int threads)
 			}
 			// then retry
 			
-			printf("\nlearning procedure : %2.2lf%% done...\n", (double)(100 * (count+1))/(learningSize));
 			// show loss func and its difference
-			printf("L = %lf\n", L/N);
-			printf("increment of L = %lf\n", (L-Lold)/N);
+			printf("\nL = %lf\n", L/N);
+			printf("increment of L = %lf...", (L-Lold)/N);
 			Lold = L;
-			
-			// show expected time
-			endtime = clock();
-			gap = (double) (endtime - starttime)/(CLOCKS_PER_SEC);
-			sec = (int) gap;
-			hr = (int) sec/3600;
-			sec -= (int) hr*3600;
-			min = (int) sec/60;
-			sec -= (int) min*60;
-			printf("costed about %d : %d : %d time...\n", hr, min, sec);
-			sec = (int) gap*(learningSize - count-1);
-			hr = (int) sec/3600;
-			sec -= (int) hr*3600;
-			min = (int) sec/60;
-			sec -= (int) min*60;
-			printf("estimated remaining time %d : %d : %d...\n>> ", hr, min, sec);
 		}
 	}
 	Key.Stop();
@@ -432,10 +441,11 @@ int CTraining::SetHyperparam(ValidationParam validateMode, double hyperparam)
 
 void CTraining::ShowHelp()
 {
-	printf("enter c whenever you want to check accuracy\n");
+	printf("\nenter c whenever you want to check accuracy\n");
 	printf("enter s whenever you want to save\n");
+	printf("enter p whenever you want to check progress\n");
 	printf("enter q whenever you want to quit the program\n");
-	printf("enter h whenever you want to read this help message again\n>> ");
+	printf("enter h whenever you want to read this help message again...");
 }
 
 void CTraining::TrainingThreadFunc(int l)

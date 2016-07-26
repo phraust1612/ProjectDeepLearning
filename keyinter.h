@@ -3,6 +3,7 @@
 #include <process.h>
 #include <windows.h>
 #include <stdio.h>
+#include <conio.h>
 
 typedef void (*pfCallback)();
 
@@ -16,6 +17,5 @@ public:
 	~CKeyinter();
 	void Start();
 	void Stop();
-	void SetCallbackFunction(pfCallback cbFunc);
 };
 #endif

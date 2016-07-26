@@ -21,19 +21,12 @@ void CKeyinter::Stop()
 	bStop = TRUE;
 }
 
-void CKeyinter::SetCallbackFunction(pfCallback cbFunc)
-{
-	m_cb = cbFunc;
-}
-
 void CallbackFunc(void *vp)
 {
 	int temp=0;
 	CKeyinter* p = (CKeyinter*)vp;
 	while(p->bStop!=FALSE)
 	{
-		p->keysave=fgetc(stdin);
-		while((temp = getchar())!='\n');
-		if(p->m_cb) p->m_cb();
+		p->keysave=_getch();
 	}
 }

@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include "training.h"
 #include "dataread.h"
-#define VERSION		 1.5
+#define VERSION		 1.6
 const char* pdl_error(int Err);
 
 int main()
@@ -102,6 +102,12 @@ int main()
 	printf("how many threads do you want to set?\n>> ");
 	scanf("%d", &tmp);
 	getchar();
+	if(tmp<1)
+	{
+		printf("you must use at least one thread!\n");
+		system("pause");
+		return tmp;
+	}
 	
 	// step 6 : start training
 	// input q to quit or other commands
