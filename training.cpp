@@ -43,6 +43,7 @@ CTraining::~CTraining()
 int CTraining::WeightInit(int size)
 {
 	int i,j,k;
+	loaded = 0;
 	count = 0;
 	learningSize=size;
 	DELTA = DELTADEFAULT;
@@ -166,7 +167,7 @@ void CTraining::ParamAllocate()
 
 void CTraining::Training(int threads)
 {
-	int i,j,k,u,v,m,tmp,hr,min,sec,startindexl,startindexcount;
+	int i,j,k,tmp,hr,min,sec,startindexl,startindexcount,target;
 	time_t starttime, endtime;
 	double gap, Try, acc;
 	bool cont = true;
@@ -182,13 +183,21 @@ void CTraining::Training(int threads)
 	
 	for(;count<learningSize && cont; count++) 
 	{
-		// initializing dL/dW^i_j,k and dL/db^i_j
-		// I'm wondering if I have to memorize whole L_l
-		// so I'll just accumulate all gradient
+		// compute target layer in this loop
+		j = count;
+		tmp = (int) learningSize/alpha;
+		target = 0;
+		while(j >= tmp)
+		{
+			j -= tmp;
+			target++;
+		}
+		if(target>=alpha) target = alpha-1;
+		
 		if(!loaded)
 		{
 			L = 0;
-			l=0;
+			l = 0;
 			for(i=0; i<alpha && cont; i++)
 			{
 				for(j=0; j<D[i+1]; j++)
@@ -261,14 +270,16 @@ void CTraining::Training(int threads)
 			}
 			
 			// run multi-thread to calculate gradients
-			for(i=0; i<threads; i++) hThread[i] = std::thread(&CTraining::TrainingThreadFunc, this, l+i);
+			for(i=0; i<threads; i++) hThread[i] = std::thread(&CTraining::TrainingThreadFunc, this, l+i, target);
 			for(i=0; i<threads; i++) hThread[i].join();
 			l += threads;
 		}
 		
+		i = target;
 		// L2 regularization
+		/* compute only target layer
 		for(i=0; i<alpha; i++)
-		{
+		{*/
 			for(j=0; j<D[i+1]; j++)
 			{
 				for(k=0; k<D[i]; k++)
@@ -278,27 +289,29 @@ void CTraining::Training(int threads)
 				}
 				dLdb[i][j] /= (double) N;
 			}
-		}
+		//}
 		// calculate gradient of L is done...
 		
 		// optimizing next W, b according to SGD
 		if(cont)
 		{
+		/* compute only target layer
 			for(i=0; i<alpha; i++)
-			{
+			{*/
+				// optimize each layer's weight individually
 				for(j=0; j<D[i+1]; j++)
 				{
 					for(k=0; k<D[i]; k++) W[i][j][k] -= (H * dLdW[i][j][k]);
 					b[i][j] -= (H * dLdb[i][j]);
 				}
-			}
-			// then retry
+		//	}
 			
 			// show loss func and its difference
 			printf("\nL = %lf\n", L/N);
 			printf("increment of L = %lf...", (L-Lold)/N);
 			Lold = L;
 		}
+		// then retry
 	}
 	Key.Stop();
 }
@@ -356,7 +369,7 @@ void CTraining::FileSave()
 
 double CTraining::CheckAccuracy()
 {
-	int i, j, k, l;
+	int i, j, k, m;
 	// memory allocation for s and delta
 	double** st = (double**) malloc(sizeof(double*) * (alpha+1));
 	for(i=0; i<=alpha; i++) st[i] = (double*) malloc(sizeof(double) * D[i]);
@@ -367,13 +380,13 @@ double CTraining::CheckAccuracy()
 	int ans;			// temporary answer
 	double highest;		// temporary score used for seeking highest score
 	// computing score function for each test images
-	for(l=0; l<Nt; l++)	// l is an index for each picture
+	for(m=0; m<Nt; m++)	// m is an index for each picture
 	{
 		j=0;
 		// initializaing...
 		for(i=0; i<D[0]; i++)
 		{
-			st[0][i] = pData->xt[l][i];	// initializing s_0 = x_l
+			st[0][i] = pData->xt[m][i];	// initializing s_0 = x_l
 			deltat[0][i] = 1;	// initializing deltat^0_i,i = 1,
 		}						// actually deltat is DxD matrix but I'll save memory
 		
@@ -396,7 +409,7 @@ double CTraining::CheckAccuracy()
 		}
 		
 		// compare with answer and calculate the accuracy
-		// firstly find l'th image's highest score and its label
+		// firstly find m'th image's highest score and its label
 		ans=0;
 		highest=st[alpha][0];
 		for(j=1; j<D[alpha]; j++)
@@ -408,7 +421,7 @@ double CTraining::CheckAccuracy()
 			}
 		}
 		// accumulate count if ans is correct
-		if(ans == pData->yt[l]) count++;
+		if(ans == pData->yt[m]) count++;
 	}
 	
 	for(i=0; i<=alpha; i++) free(st[i]);
@@ -448,9 +461,9 @@ void CTraining::ShowHelp()
 	printf("enter h whenever you want to read this help message again...");
 }
 
-void CTraining::TrainingThreadFunc(int l)
+void CTraining::TrainingThreadFunc(int index, int targetlayer)
 {
-	int i,j,k,u,v,m,tmp;
+	int i,j,k,m,tmp;
 	// memory allocation of s, delta, etc
 	// s^(i+1) = W^i * delta^i * s^i + b^i
 	double** s = (double**) malloc(sizeof(double*) * (alpha+1));
@@ -482,7 +495,7 @@ void CTraining::TrainingThreadFunc(int l)
 	// initialize score function and delta chronicle
 	for(j=0; j<D[0]; j++)
 	{
-		s[0][j] = pData->x[l][j];	// initializing sBef = x_l
+		s[0][j] = pData->x[index][j];	// initializing sBef = x_l
 		delta[0][j] = 1;	// initializing first deltaBef
 	}
 	
@@ -521,7 +534,7 @@ void CTraining::TrainingThreadFunc(int l)
 	}
 	
 	// calculating gradient for b,W in general
-	for(m=alpha-2; m>=0; m--)
+	for(m=alpha-2; m>=targetlayer; m--)
 	{
 		for(i=0; i<D[alpha]; i++)
 		{
@@ -549,8 +562,8 @@ void CTraining::TrainingThreadFunc(int l)
 	// L_l = sig_i
 	for(i=0; i<D[alpha]; i++)
 	{
-		if(i == pData->y[l]) continue;
-		if((tmp = s[alpha][i] - s[alpha][pData->y[l]] + DELTA) > 0)
+		if(i == pData->y[index]) continue;
+		if((tmp = s[alpha][i] - s[alpha][pData->y[index]] + DELTA) > 0)
 		{
 			L += tmp;
 			for(m=0; m<alpha; m++)
@@ -558,8 +571,8 @@ void CTraining::TrainingThreadFunc(int l)
 				for(j=0; j<D[m+1]; j++)
 				{
 					for(k=0; k<D[m]; k++)
-						dLdW[m][j][k] += dW[m][i][j][k] - dW[m][pData->y[l]][j][k];
-					dLdb[m][j] += db[m][i][j] - db[m][pData->y[l]][j];
+						dLdW[m][j][k] += dW[m][i][j][k] - dW[m][pData->y[index]][j][k];
+					dLdb[m][j] += db[m][i][j] - db[m][pData->y[index]][j];
 				}
 			}
 		}

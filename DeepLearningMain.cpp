@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include "training.h"
 #include "dataread.h"
-#define VERSION		 1.6
+#define VERSION		 1.7
 const char* pdl_error(int Err);
 
 int main()
@@ -65,8 +65,14 @@ int main()
 	scanf("%d", &tmp);
 	getchar();
 	if(tmp) tmp = hTrain.WeightLoad();
-	else if(valid) tmp = hTrain.WeightInit(100);
-	else tmp = hTrain.WeightInit(1000);
+	else
+	{
+		// step 4 : set learning size
+		printf("set learning size\n>> ");
+		scanf("%d", &tmp);
+		getchar();
+		tmp = hTrain.WeightInit(tmp);
+	}
 	if(tmp)
 	{
 		printf(pdl_error(tmp));
@@ -75,7 +81,7 @@ int main()
 	}
 	printf("Weight parameters load done...\n");
 	
-	// step 4 : choose whetherinput your own hyperparameter values or not
+	// step 5 : choose whetherinput your own hyperparameter values or not
 	valid = None;
 	while(true)
 	{
@@ -98,7 +104,7 @@ int main()
 		}
 	}
 	
-	// step 5 : choose how many threads you're gonna use
+	// step 6 : choose how many threads you're gonna use
 	printf("how many threads do you want to set?\n>> ");
 	scanf("%d", &tmp);
 	getchar();
@@ -109,7 +115,7 @@ int main()
 		return tmp;
 	}
 	
-	// step 6 : start training
+	// step 7 : start training
 	// input q to quit or other commands
 	printf("start learning procedure...\n");
 	hTrain.ShowHelp();

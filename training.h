@@ -34,7 +34,7 @@ public:
 	void Training(int threads);
 	void FileSave();
 	void ShowHelp();
-	void TrainingThreadFunc(int l);
+	void TrainingThreadFunc(int index, int targetlayer);
 	int SetHyperparam(ValidationParam validateMode, double hyperparam);
 	double CheckAccuracy();
 };
