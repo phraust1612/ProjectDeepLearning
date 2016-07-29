@@ -11,7 +11,12 @@
 #define DELTADEFAULT	1.0
 #define LAMBDADEFAULT	0.001
 #define HDEFAULT		0.001
-
+#define CUDAEXIST	0
+// set CUDAEXIST 1 if you've installed cuda before compiling
+// otherwise set 0
+#if CUDAEXIST
+#include <cuda.h>
+#endif
 
 class CTraining
 {
@@ -25,6 +30,11 @@ private:
 	CDataread *pData;
 	void ParamAllocate();
 	CKeyinter Key;
+#if CUDAEXIST
+	cudaError_t cuda_err;
+	int cudadevice;
+	cudaDeviceProp deviceProp;
+#endif
 public:
 	
 	CTraining(CDataread* pD);

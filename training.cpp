@@ -1,4 +1,10 @@
 #include "training.h"
+#if CUDAEXIST
+__global__ void CudaTrainingThread(double *s, bool *delta, double *dW, double *db)
+{
+	
+}
+#endif
 
 CTraining::CTraining(CDataread* pD)
 {
@@ -6,7 +12,13 @@ CTraining::CTraining(CDataread* pD)
 	N = pData->N;
 	Nt = pData->Nt;
 	loaded=0;
-	
+#if CUDAEXIST
+	deviceProp.major = 0;
+	deviceProp.minor = 0;
+	cudaGetDeviceProperties(&deviceProp, cudadevice);
+	cuda_err = cudaGetLastError();
+	if(cuda_err != cudaSuccess) CUDAEXIST = 1;
+#endif	
 	alpha = 1;
 	learningSize = 0;
 	count = 0;
