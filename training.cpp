@@ -1,8 +1,8 @@
 #include "training.h"
 #if CUDAEXIST
-__global__ void CudaTrainingThread(double *s, bool *delta, double *dW, double *db)
+__global__ void CudaTrainingThread(double *s0, double ***W, double **b, /* output var */ double ***dLdW, double **dLdb)
 {
-	
+	int thisblock = threadIdx.x;
 }
 #endif
 
@@ -192,6 +192,18 @@ void CTraining::Training(int threads)
 	startindexl = l;
 	startindexcount = count;
 	starttime = clock();
+#if CUDAEXIST
+	double *d_W, *d_b, *d_s0, *d_dW, *d_db, *d_dLdW, *d_dLdb;
+	size_t size = 0;
+	for(i=0; i<alpha; i++) size += D[i+1] * D[i];
+	size *= sizeof(double);
+	cudaMalloc(&d_W, size);
+	size = 0;
+	for(i=0; i<alpha; i++) size += D[i+1];
+	size *= sizeof(double);
+	cudaMalloc(&d_b, size);
+	
+#endif
 	
 	for(;count<learningSize && cont; count++) 
 	{
@@ -280,11 +292,17 @@ void CTraining::Training(int threads)
 					Key.keysave = 'n';
 					break;
 			}
+#if CUDAEXIST
+			// to calculate gradient,
+			// run multi-thread via gpgpu
 			
-			// run multi-thread to calculate gradients
+			// TODO : do it
+#else
+			// run multi-thread via cpu
 			for(i=0; i<threads; i++) hThread[i] = std::thread(&CTraining::TrainingThreadFunc, this, l+i, target);
 			for(i=0; i<threads; i++) hThread[i].join();
 			l += threads;
+#endif
 		}
 		
 		i = target;
