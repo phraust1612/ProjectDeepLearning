@@ -31,6 +31,7 @@ private:
 	void ParamAllocate();
 	CKeyinter Key;
 #if CUDAEXIST
+#define CUDABLOCKS	1000
 	cudaError_t cuda_err;
 	int cudadevice;
 	cudaDeviceProp deviceProp;
