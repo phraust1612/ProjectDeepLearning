@@ -31,7 +31,7 @@ int main()
 	printf("otherwise input 0\n>> ");
 	scanf("%d", &tmp);
 	getchar();
-	printf("loading training set...\n");
+	printf("loading training set...");
 	tmp = hData.ReadTrainingSet(tmp);
 	if(tmp)
 	{
@@ -41,7 +41,7 @@ int main()
 	}
 	if(!valid)
 	{
-		printf("loading test set...\n");
+		printf("\nloading test set...");
 		hData.ReadTestSet();
 		if(tmp)
 		{
@@ -50,7 +50,7 @@ int main()
 			return tmp;
 		}
 	}
-	printf("scanning all picture done...\n");
+	printf("\nscanning all picture done...\n");
 	
 	CTraining hTrain = CTraining(&hData);
 	

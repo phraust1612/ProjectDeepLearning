@@ -67,9 +67,10 @@ int CDataread::ReadMNISTTrainingSet(int validateMode)
 {
 	//if((validateMode!=0) && (validateMode!=1)) return ERR_UNAPPROPRIATE_INPUT;
 	int i,j,tmp;
+	double proc;
 	// read file buffer
-	FILE* fpTrainImage = fopen("train-images.idx3-ubyte", "rb");
-	FILE* fpTrainLabel = fopen("train-labels.idx1-ubyte", "rb");
+	FILE* fpTrainImage = fopen("MNIST/train-images.idx3-ubyte", "rb");
+	FILE* fpTrainLabel = fopen("MNIST/train-labels.idx1-ubyte", "rb");
 	fread(&tmp, sizeof(int), 1, fpTrainImage);	// read magic number
 	if(tmp!=0x03080000) return ERR_FILELOAD_FAILED;
 	fread(&tmp, sizeof(int), 1, fpTrainLabel);	// read magic number
@@ -98,7 +99,12 @@ int CDataread::ReadMNISTTrainingSet(int validateMode)
 		{
 			for(j=0; j<D0; j++) xt[i][j] = (double) (fgetc(fpTrainImage) - 128)/128;
 			yt[i] = (unsigned char) fgetc(fpTrainLabel);
+			proc = (double) 100*i/Nt;
+			printf("%2.2lf%%\b\b\b\b\b", proc);
+			if(proc>9.995) printf("\b");
+			if(proc>=99.995) printf("\b");
 		}
+		printf("done...");
 	}
 	x = (double**) malloc(sizeof(double*) * N);
 	y = (unsigned char*) malloc(sizeof(double) * N);
@@ -109,7 +115,12 @@ int CDataread::ReadMNISTTrainingSet(int validateMode)
 	{
 		for(j=0; j<D0; j++) x[i][j] = (double) (fgetc(fpTrainImage) - 128)/128;
 		y[i] = (unsigned char)fgetc(fpTrainLabel);
+		proc = (double) 100*i/N;
+		printf("%2.2lf%%\b\b\b\b\b", proc);
+		if(proc>9.995) printf("\b");
+		if(proc>=99.995) printf("\b");
 	}
+	printf("done...");
 	fclose(fpTrainImage);
 	fclose(fpTrainLabel);
 	return 0;
@@ -118,10 +129,11 @@ int CDataread::ReadMNISTTrainingSet(int validateMode)
 int CDataread::ReadMNISTTestSet()
 {
 	int i, j, tmp;
+	double proc;
 	if(xt!=NULL || yt!=NULL) return 0;
 	// Load test images and labels
-	FILE* fpTestImage = fopen("t10k-images.idx3-ubyte", "rb");
-	FILE* fpTestLabel = fopen("t10k-labels.idx1-ubyte", "rb");
+	FILE* fpTestImage = fopen("MNIST/t10k-images.idx3-ubyte", "rb");
+	FILE* fpTestLabel = fopen("MNIST/t10k-labels.idx1-ubyte", "rb");
 	fread(&tmp, sizeof(int), 1, fpTestImage);	// read magic number
 	if(tmp!=0x03080000) return ERR_FILELOAD_FAILED;
 	fread(&tmp, sizeof(int), 1, fpTestLabel);	// read magic number
@@ -144,7 +156,12 @@ int CDataread::ReadMNISTTestSet()
 	{
 		for(j=0; j<D0; j++) xt[i][j] = (double) (fgetc(fpTestImage) - 128)/128;
 		yt[i] = (unsigned char) fgetc(fpTestLabel);
+		proc = (double) 100*i/Nt;
+		printf("%2.2lf%%\b\b\b\b\b", proc);
+		if(proc>9.995) printf("\b");
+		if(proc>=99.995) printf("\b");
 	}
+	printf("done...");
 	
 	fclose(fpTestImage);
 	fclose(fpTestLabel);
