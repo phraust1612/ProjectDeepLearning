@@ -3,7 +3,6 @@
 #include "training.h"
 #include "dataread.h"
 #define VERSION		 1.7
-const char* pdl_error(int Err);
 
 int main()
 {
@@ -32,7 +31,7 @@ int main()
 	printf("otherwise input 0\n>> ");
 	scanf("%d", &tmp);
 	getchar();
-	printf("loading training set...\n");
+	printf("loading training set...");
 	tmp = hData.ReadTrainingSet(tmp);
 	if(tmp)
 	{
@@ -42,7 +41,7 @@ int main()
 	}
 	if(!valid)
 	{
-		printf("loading test set...\n");
+		printf("\nloading test set...");
 		hData.ReadTestSet();
 		if(tmp)
 		{
@@ -51,7 +50,7 @@ int main()
 			return tmp;
 		}
 	}
-	printf("scanning all picture done...\n");
+	printf("\nscanning all picture done...\n");
 	
 	CTraining hTrain = CTraining(&hData);
 	
@@ -129,27 +128,4 @@ int main()
 	// hTrain.~CTraining();
 	printf("end of the programm!!\n");
 	return 0;
-}
-
-const char* pdl_error(int Err)
-{
-	switch(Err)
-	{
-		case ERR_NONE:
-			return "no error occured\n";
-		case ERR_UNAPPROPRIATE_INPUT:
-			return "unappropriate input\n";
-		case ERR_FILELOAD_FAILED:
-			return "image file load failed\n";
-		case ERR_FILE_DISCORDED:
-			return "training images format and test set doesn't match'\n";
-		case ERR_WRONG_DIMENSION:
-			return "training image's dimension and test set's doesn't match\n";
-		case ERR_WRONG_VALID_PARAM:
-			return "unknown validation parameter chosen\n";
-		case ERR_CRACKED_FILE:
-			return "saved file cracked\n";
-		default:
-			return "unknown error code\n";
-	}
 }

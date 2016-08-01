@@ -1,4 +1,29 @@
 #include "training.h"
+#if CUDAEXIST
+__global__ void CudaTrainingThread(double *d_W, double *d_b, double *d_dLdW, double *d_dLdb)
+{
+	__shared__ double s[ /* size */ ];
+	__shared__ bool delta[ /* size */ ];
+	__shared__ double dW[ /* size */ ];
+	__shared__ double db[ /* size */ ];
+	int thisblock = threadIdx.x;
+}
+
+__global__ void CudaResetGradients(double *d_dLdW, double *d_dLdb)
+{
+	
+}
+
+__global__ void CudaL2regularization(double *d_W, double *d_dLdW, double *d_dLdb)
+{
+	
+}
+
+__global__ void CudaOptimization(double *d_W, double *d_b, double *d_dLdW, double *d_dLdb, double H)
+{
+	
+}
+#endif
 
 CTraining::CTraining(CDataread* pD)
 {
@@ -6,7 +31,13 @@ CTraining::CTraining(CDataread* pD)
 	N = pData->N;
 	Nt = pData->Nt;
 	loaded=0;
-	
+#if CUDAEXIST
+	deviceProp.major = 0;
+	deviceProp.minor = 0;
+	cudaGetDeviceProperties(&deviceProp, cudadevice);
+	cuda_err = cudaGetLastError();
+	if(cuda_err != cudaSuccess) CUDAEXIST = 1;
+#endif	
 	alpha = 1;
 	learningSize = 0;
 	count = 0;
@@ -181,6 +212,40 @@ void CTraining::Training(int threads)
 	startindexcount = count;
 	starttime = clock();
 	
+#if CUDAEXIST
+	// allocate device memories
+	double *d_W, *d_b, *d_Wptmp, *d_bptmp, *d_dLdW, *d_dLdb;
+	size_t sizeW, sizeb;
+	sizeW = 0;
+	for(i=0; i<alpha; i++) sizeW += D[i+1] * D[i];
+	sizeW *= sizeof(double);
+	cudaMalloc((void**)&d_W, sizeW);
+	
+	sizeb = 0;
+	for(i=0; i<alpha; i++) sizeb += D[i+1];
+	sizeb *= sizeof(double);
+	cudaMalloc((void**)&d_b, sizeb);
+	
+	sizeW *= CUDABLOCKS;
+	sizeb *= CUDABLOCKS;
+	cudaMalloc((void**)&d_dLdW, sizeW);
+	cudaMalloc((void**)&d_dLdb, sizeb);
+	
+	// memcpy initial W,b from host to device
+	d_Wptmp = d_W;
+	d_bptmp = d_b;
+	for(i=0; i<alpha; i++)
+	{
+		for(j=0; i<D[i+1]; j++)
+		{
+			cudaMemcpy(d_Wptmp, W[i][j], D[i] * sizeof(double), cudaMemcpyHostToDevice);
+			d_Wptmp += D[i] * sizeof(double);
+		}
+		cudaMemcpy(d_b, b[i], D[i+1] * sizeof(double), cudaMemcpyHostToDevice);
+		d_bptmp += D[i+1] * sizeof(double);
+	}
+#endif
+	
 	for(;count<learningSize && cont; count++) 
 	{
 		// compute target layer in this loop
@@ -198,6 +263,9 @@ void CTraining::Training(int threads)
 		{
 			L = 0;
 			l = 0;
+#if CUDAEXIST
+			// TODO : initialize gradient of Loss on device
+#else
 			for(i=0; i<alpha && cont; i++)
 			{
 				for(j=0; j<D[i+1]; j++)
@@ -206,6 +274,7 @@ void CTraining::Training(int threads)
 					for(k=0; k<D[i]; k++) dLdW[i][j][k] = 0;
 				}
 			}
+#endif
 		}
 		loaded = 0;
 		
@@ -268,13 +337,23 @@ void CTraining::Training(int threads)
 					Key.keysave = 'n';
 					break;
 			}
+#if CUDAEXIST
+			// to calculate gradient,
+			// run multi-thread via gpgpu
 			
-			// run multi-thread to calculate gradients
+			// TODO : do it
+#else
+			// run multi-thread via cpu
 			for(i=0; i<threads; i++) hThread[i] = std::thread(&CTraining::TrainingThreadFunc, this, l+i, target);
 			for(i=0; i<threads; i++) hThread[i].join();
 			l += threads;
+#endif
 		}
 		
+#if CUDAEXIST
+		// TODO : compute L2 regularization on deviice
+		// and optimize it
+#else
 		i = target;
 		// L2 regularization
 		/* compute only target layer
@@ -311,9 +390,35 @@ void CTraining::Training(int threads)
 			printf("increment of L = %lf...", (L-Lold)/N);
 			Lold = L;
 		}
+#endif
 		// then retry
 	}
 	Key.Stop();
+#if CUDAEXIST
+	// copy from device to host
+	d_Wptmp = d_W;
+	d_bptmp = d_b;
+	for(i=0; i<alpha; i++)
+	{
+		for(j=0; i<D[i+1]; j++)
+		{
+			cudaMemcpy(W[i][j], d_Wptmp, D[i] * sizeof(double), cudaMemcpyHostToDevice);
+			d_Wptmp += D[i] * sizeof(double);
+		}
+		cudaMemcpy(b[i], d_bptmp, D[i+1] * sizeof(double), cudaMemcpyHostToDevice);
+		d_bptmp += D[i+1] * sizeof(double);
+	}
+	
+	// free cuda memories
+	cudaFree(d_W);
+	cudaFree(d_b);
+	cudaFree(d_s);
+	cudaFree(d_delta);
+	cudaFree(d_dW);
+	cudaFree(d_db);
+	cudaFree(d_dLdb);
+	cudaFree(d_dLdW);
+#endif
 }
 
 // save alpha, D, W, b at file
