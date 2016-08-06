@@ -183,6 +183,7 @@ int CDataread::ReadCIFAR10TrainingSet(int validateMode)
 	FILE* fpTraining4 = fopen("cifar-10/data_batch_4.bin","rb");
 	FILE* fpTraining5 = fopen("cifar-10/data_batch_5.bin","rb");
 	
+	M = 10;
 	D0 = 3072;
 	
 	if(validateMode) N = 40000;

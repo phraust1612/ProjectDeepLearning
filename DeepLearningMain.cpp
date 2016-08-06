@@ -7,7 +7,7 @@
 int main()
 {
 	printf("DeepLearning ver %1.1f start\n", VERSION);
-	int tmp;
+	int tmp,tmp2;
 	double Try;
 	FileSetMode filemode;
 	ValidationParam valid;
@@ -30,20 +30,20 @@ int main()
 	// step 2 : choose whether use validation set or not
 	printf("to use validation set, input 1\n");
 	printf("otherwise input 0\n>> ");
-	scanf("%d", &tmp);
+	scanf("%d", &tmp2);
 	getchar();
 	printf("loading training set...");
-	tmp = hData.ReadTrainingSet(tmp);
+	tmp = hData.ReadTrainingSet(tmp2);
 	if(tmp)
 	{
 		printf(pdl_error(tmp));
 		system("pause");
 		return tmp;
 	}
-	if(!valid)
+	if(!tmp2)
 	{
 		printf("\nloading test set...");
-		hData.ReadTestSet();
+		tmp = hData.ReadTestSet();
 		if(tmp)
 		{
 			printf(pdl_error(tmp));
@@ -62,9 +62,9 @@ int main()
 	printf("to load previous weight, enter 1\n");
 	printf("or to start with new random var, enter 0\n");
 	printf(">> ");
-	scanf("%d", &tmp);
+	scanf("%d", &tmp2);
 	getchar();
-	if(tmp) tmp = hTrain.WeightLoad();
+	if(tmp2) tmp = hTrain.WeightLoad();
 	else
 	{
 		// step 4 : set learning size
