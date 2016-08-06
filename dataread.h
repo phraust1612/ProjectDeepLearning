@@ -23,6 +23,8 @@ private:
 	FileSetMode mode;
 	int ReadMNISTTrainingSet(int validateMode);
 	int ReadMNISTTestSet();
+	int ReadCIFAR10TrainingSet(int validateMode);
+	int ReadCIFAR10TestSet();
 public:
 	double **x, **xt;
 	unsigned char *y, *yt;

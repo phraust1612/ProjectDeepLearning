@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include "training.h"
 #include "dataread.h"
-#define VERSION		 1.7
+#define VERSION		 1.8
 
 int main()
 {
@@ -15,6 +15,7 @@ int main()
 	
 	// step 1 : choose which dataset to use
 	printf("MNIST : 1\n");
+	printf("CIFAR-10 : 2\n");
 	printf(">> ");
 	scanf("%d", &filemode);
 	getchar();
