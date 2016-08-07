@@ -23,12 +23,14 @@ class CTraining
 private:
 	// N is the number of training sets
 	// and Nt is the number of test sets
-	int alpha, N, Nt, *D, count, l, learningSize, loaded;
+	int alpha, N, Nt, *D, count, l, learningSize, loaded, sizeW, sizeb;
 	// H, DELTA, LAMBDA are hyperparameters
 	// dW, db each stands for ds/dW, ds/db matrices
-	double H, ***W, **b, ***dLdW, **dLdb, L, Lold, DELTA, LAMBDA;
+	double H, *W, *b, *dLdW, *dLdb, L, Lold, DELTA, LAMBDA;
 	CDataread *pData;
 	void ParamAllocate();
+	int indexOfW(int i, int j, int k);
+	int indexOfb(int i, int j);
 	CKeyinter Key;
 #if CUDAEXIST
 #define CUDABLOCKS	1000
