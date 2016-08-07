@@ -119,7 +119,8 @@ int CTraining::WeightInit(int size)
 
 int CTraining::WeightLoad()
 {
-	int i,j;
+	int i,j,err;
+	err = ERR_NONE;
 	FILE* fpWeight = fopen("TrainedParam", "rb");
 	fread(&alpha, sizeof(int), 1, fpWeight);	// scan alpha
 	// allocate D and scan them
@@ -134,11 +135,12 @@ int CTraining::WeightLoad()
 	fread(b, 1, sizeb, fpWeight);
 	
 	fread(&H, sizeof(double), 1, fpWeight);
-	if(!H) return ERR_CRACKED_FILE;
+	if(!H) err = ERR_CRACKED_FILE;
 	fread(&DELTA, sizeof(double), 1, fpWeight);
 	fread(&LAMBDA, sizeof(double), 1, fpWeight);
 	fread(&count, sizeof(int), 1, fpWeight);
 	fread(&learningSize, sizeof(int), 1, fpWeight);
+	if(count == learningSize) err = EXC_TRAININGDONE;
 	fread(&l, sizeof(int), 1, fpWeight);
 	fread(&L, sizeof(double), 1, fpWeight);
 	fread(&Lold, sizeof(double), 1, fpWeight);
@@ -149,7 +151,7 @@ int CTraining::WeightLoad()
 	fclose(fpWeight);
 	loaded=1;
 	
-	return 0;
+	return err;
 }
 
 // return err if i,j,k have wrong num
@@ -339,7 +341,7 @@ void CTraining::Training(int threads)
 			// TODO : do it
 #else
 			// run multi-thread via cpu
-			for(i=0; i<threads; i++) hThread[i] = std::thread(&CTraining::TrainingThreadFunc, this, l+i, target);
+			for(i=0; i<threads; i++) hThread[i] = std::thread(&CTraining::TrainingThreadFunc, this, l+i, 0);
 			for(i=0; i<threads; i++) hThread[i].join();
 			l += threads;
 #endif
@@ -349,11 +351,11 @@ void CTraining::Training(int threads)
 		// TODO : compute L2 regularization on deviice
 		// and optimize it
 #else
-		i = target;
+		//i = target;
 		// L2 regularization
-		/* compute only target layer
+		/* compute only target layer */
 		for(i=0; i<alpha; i++)
-		{*/
+		{
 			for(j=0; j<D[i+1]; j++)
 			{
 				for(k=0; k<D[i]; k++)
@@ -363,22 +365,22 @@ void CTraining::Training(int threads)
 				}
 				dLdb[indexOfb(i,j)] /= (double) N;
 			}
-		//}
+		}
 		// calculate gradient of L is done...
 		
 		// optimizing next W, b according to SGD
 		if(cont)
 		{
-		/* compute only target layer
+		/* compute only target layer*/
 			for(i=0; i<alpha; i++)
-			{*/
+			{
 				// optimize each layer's weight individually
 				for(j=0; j<D[i+1]; j++)
 				{
 					for(k=0; k<D[i]; k++) W[indexOfW(i,j,k)] -= (H * dLdW[indexOfW(i,j,k)]);
 					b[indexOfb(i,j)] -= (H * dLdb[indexOfb(i,j)]);
 				}
-		//	}
+			}
 			
 			// show loss func and its difference
 			printf("\nL = %lf\n", L/N);
@@ -461,6 +463,7 @@ double CTraining::CheckAccuracy()
 	int count = 0;	// number of how many images were correct
 	int ans;			// temporary answer
 	double highest;		// temporary score used for seeking highest score
+	double proc;
 	// computing score function for each test images
 	for(m=0; m<Nt; m++)	// m is an index for each picture
 	{
@@ -504,7 +507,13 @@ double CTraining::CheckAccuracy()
 		}
 		// accumulate count if ans is correct
 		if(ans == pData->yt[m]) count++;
+		
+		proc = (double) 100 * m/Nt;
+		printf("%2.2lf%%\b\b\b\b\b",proc);
+		if(proc>9.995) printf("\b");
+		if(proc>=99.995) printf("\b");
 	}
+	printf("done...");
 	
 	for(i=0; i<=alpha; i++) free(st[i]);
 	for(i=0; i<alpha; i++) free(deltat[i]);
@@ -528,6 +537,9 @@ int CTraining::SetHyperparam(ValidationParam validateMode, double hyperparam)
 		return 0;
 	case LearningrateH:
 		H = hyperparam;
+		return 0;
+	case LearningSize:
+		learningSize = hyperparam;
 		return 0;
 	default:
 		return ERR_WRONG_VALID_PARAM;

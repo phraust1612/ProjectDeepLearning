@@ -7,7 +7,7 @@
 int main()
 {
 	printf("DeepLearning ver %1.1f start\n", VERSION);
-	int tmp,tmp2;
+	int tmp, err;
 	double Try;
 	FileSetMode filemode;
 	ValidationParam valid;
@@ -19,36 +19,36 @@ int main()
 	printf(">> ");
 	scanf("%d", &filemode);
 	getchar();
-	tmp = hData.SetMode(filemode);
-	if(tmp)
+	err = hData.SetMode(filemode);
+	if(err < 0)
 	{
-		printf(pdl_error(tmp));
+		printf(pdl_error(err));
 		system("pause");
-		return tmp;
+		return err;
 	}
 	
 	// step 2 : choose whether use validation set or not
 	printf("to use validation set, input 1\n");
 	printf("otherwise input 0\n>> ");
-	scanf("%d", &tmp2);
+	scanf("%d", &tmp);
 	getchar();
 	printf("loading training set...");
-	tmp = hData.ReadTrainingSet(tmp2);
-	if(tmp)
+	err = hData.ReadTrainingSet(tmp);
+	if(err < 0)
 	{
-		printf(pdl_error(tmp));
+		printf(pdl_error(err));
 		system("pause");
-		return tmp;
+		return err;
 	}
-	if(!tmp2)
+	if(!tmp)
 	{
 		printf("\nloading test set...");
-		tmp = hData.ReadTestSet();
-		if(tmp)
+		err = hData.ReadTestSet();
+		if(err < 0)
 		{
-			printf(pdl_error(tmp));
+			printf(pdl_error(err));
 			system("pause");
-			return tmp;
+			return err;
 		}
 	}
 	printf("\nscanning all picture done...\n");
@@ -62,22 +62,34 @@ int main()
 	printf("to load previous weight, enter 1\n");
 	printf("or to start with new random var, enter 0\n");
 	printf(">> ");
-	scanf("%d", &tmp2);
+	scanf("%d", &tmp);
 	getchar();
-	if(tmp2) tmp = hTrain.WeightLoad();
+	if(tmp) err = hTrain.WeightLoad();
 	else
 	{
 		// step 4 : set learning size
 		printf("set learning size\n>> ");
 		scanf("%d", &tmp);
 		getchar();
-		tmp = hTrain.WeightInit(tmp);
+		err = hTrain.WeightInit(tmp);
 	}
-	if(tmp)
+	if(err == EXC_TRAININGDONE)
 	{
-		printf(pdl_error(tmp));
+		printf("training proc's already done, check accuracy and end?\n>> ");
+		scanf("%d", &tmp);
+		getchar();
+		if(tmp)
+		{
+			Try = hTrain.CheckAccuracy();
+			printf("accuracy : %2.2lf%%!\n", Try);
+			return err;
+		}
+	}
+	if(err < 0)
+	{
+		printf(pdl_error(err));
 		system("pause");
-		return tmp;
+		return err;
 	}
 	printf("Weight parameters load done...\n");
 	
@@ -95,12 +107,12 @@ int main()
 		printf("input your hyperparam value\n>> ");
 		scanf("%lf", &Try);
 		getchar();
-		tmp = hTrain.SetHyperparam(valid, Try);
-		if(tmp)
+		err = hTrain.SetHyperparam(valid, Try);
+		if(err < 0)
 		{
-			printf(pdl_error(tmp));
+			printf(pdl_error(err));
 			system("pause");
-			return tmp;
+			return err;
 		}
 	}
 	
@@ -110,9 +122,10 @@ int main()
 	getchar();
 	if(tmp<1)
 	{
-		printf("you must use at least one thread!\n");
+		err = ERR_UNAPPROPTHREADS;
+		printf(pdl_error(err));
 		system("pause");
-		return tmp;
+		return err;
 	}
 	
 	// step 7 : start training

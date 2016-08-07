@@ -13,7 +13,8 @@ typedef enum
 	None=0,
 	Delta,
 	Lambda,
-	LearningrateH
+	LearningrateH,
+	LearningSize
 }ValidationParam;
 
 class CDataread

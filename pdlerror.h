@@ -1,6 +1,7 @@
 #ifndef _PDLERROR_H
 #define _PDLERROR_H
 #define ERR_NONE				0x0000
+#define EXC_TRAININGDONE		0x0001
 #define ERR_UNAPPROPRIATE_INPUT	0xF001
 #define ERR_FILELOAD_FAILED		0xF002
 #define	ERR_FILE_DISCORDED		0xF003
@@ -8,6 +9,7 @@
 #define ERR_WRONG_VALID_PARAM	0xF005
 #define ERR_CRACKED_FILE		0xF006
 #define ERR_WRONGINDEX			0xF007
+#define ERR_UNAPPROPTHREADS		0xF008
 
 static const char* pdl_error(int Err)
 {
@@ -27,6 +29,8 @@ static const char* pdl_error(int Err)
 			return "unknown validation parameter chosen\n";
 		case ERR_CRACKED_FILE:
 			return "saved file cracked\n";
+		case ERR_UNAPPROPTHREADS:
+			return "you must use at least one thread!\n";
 		default:
 			return "unknown error code\n";
 	}
