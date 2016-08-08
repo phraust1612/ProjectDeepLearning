@@ -13,7 +13,7 @@ RM       = rm.exe -f
 all: all-before $(BIN) all-after
 
 clean: clean-custom
-	${RM} $(OBJ) $(BIN)
+	${RM} $(OBJ)
 
 $(BIN): $(OBJ)
 	$(CPP) $(OBJ) -o $(BIN) $(LIBS)

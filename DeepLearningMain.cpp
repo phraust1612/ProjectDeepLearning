@@ -130,7 +130,7 @@ int main()
 	
 	// step 7 : start training
 	// input q to quit or other commands
-	printf("start learning procedure...\n");
+	printf("start learning procedure...");
 	hTrain.ShowHelp();
 	hTrain.Training(tmp);
 	
