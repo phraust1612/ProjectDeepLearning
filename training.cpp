@@ -164,7 +164,7 @@ int CTraining::indexOfW(int i, int j, int k)
 	int t, ans;
 	ans = 0;
 	for(t=0; t<i; t++) ans += D[t+1] * D[t];
-	ans += D[t+1] * j;
+	ans += D[i] * j;
 	ans += k;
 	
 	return ans;
