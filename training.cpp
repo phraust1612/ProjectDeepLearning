@@ -9,19 +9,23 @@ __global__ void CudaTrainingThread(double *d_W, double *d_b, double *d_dLdW, dou
 	int thisblock = threadIdx.x;
 }
 
-__global__ void CudaResetGradients(double *d_dLdW, double *d_dLdb)
+__global__ void CudaResetGradients(double *d_grad)
 {
-	
+	int x = blockIdx.x;
+	d_grad[x] = 0;
 }
 
-__global__ void CudaL2regularization(double *d_W, double *d_dLdW, double *d_dLdb)
+__global__ void CudaL2regularization(double *d_grad, double *d_W, double N, double lambda)
 {
-	
+	int x = blockIdx.x;
+	d_grad[x] = d_grad[x] / N;
+	if(lambda) d_grad[x] = lambda * d_W[x];
 }
 
-__global__ void CudaOptimization(double *d_W, double *d_b, double *d_dLdW, double *d_dLdb, double H)
+__global__ void CudaOptimization(double *d_grad, double *d_W, double H)
 {
-	
+	int x = blockIdx.x;
+	d_W[x] = d_W[x] - (H * d_grad[x]);
 }
 #endif
 
@@ -293,13 +297,14 @@ void CTraining::Training(int threads)
 	double *d_W, *d_b, *d_dLdW, *d_dLdb;
 	cudaMalloc((void**)&d_W, sizeof(double) * sizeW);
 	cudaMalloc((void**)&d_b, sizeof(double) * sizeb);
-	
 	cudaMalloc((void**)&d_dLdW, sizeof(double) * sizeW);
 	cudaMalloc((void**)&d_dLdb, sizeof(double) * sizeb);
 	
 	// memcpy initial W,b from host to device
-	cudaMemcpy(d_W, W, sizeW, cudaMemcpyHostToDevice);
-	cudaMemcpy(d_b, b, sizeb, cudaMemcpyHostToDevice);
+	cudaMemcpy(d_W, W, sizeof(double) * sizeW, cudaMemcpyHostToDevice);
+	cudaMemcpy(d_b, b, sizeof(double) * sizeb, cudaMemcpyHostToDevice);
+	cudaMemcpy(d_dLdW, dLdW, sizeof(double) * sizeW, cudaMemcpyHostToDevice);
+	cudaMemcpy(d_dLdb, dLdb, sizeof(double) * sizeb, cudaMemcpyHostToDevice);
 #endif
 	
 	for(;count<learningSize && cont; count++) 
@@ -320,7 +325,9 @@ void CTraining::Training(int threads)
 			L = 0;
 			l = 0;
 #if CUDAEXIST
-			// TODO : initialize gradient of Loss on device
+			// initialize gradient of Loss on device
+			CudaResetGradients<<<sizeW, 1>>>(d_dLdW);
+			CudaResetGradients<<<sizeb, 1>>>(d_dLdb);
 #else
 			for(i=0; i<alpha && cont; i++)
 			{
@@ -407,11 +414,20 @@ void CTraining::Training(int threads)
 		}
 		
 #if CUDAEXIST
-		// TODO : compute L2 regularization on deviice
+		// compute L2 regularization on device
+		CudaL2Regularization<<<sizeW, 1>>>(d_dLdW, d_W, (double)N, LAMBDA);
+		CudaL2Regularization<<<sizeb, 1>>>(d_dLdb, d_b, (double)N, 0);
+		
 		// and optimize it
+		if(cont)
+		{
+			CudaOptimization<<<sizeW, 1>>>(d_dLdW, d_W, H);
+			CudaOptimization<<<sizeb, 1>>>(d_dLdb, d_b, H);
+		}
 #else
 		//i = target;
 		// L2 regularization
+		L /= (double) N;
 		/* compute only target layer */
 		for(i=0; i<target+1; i++)
 		{
@@ -421,6 +437,7 @@ void CTraining::Training(int threads)
 				{
 					dLdW[indexOfW(i,j,k)] /= (double) N;
 					dLdW[indexOfW(i,j,k)] += LAMBDA * W[indexOfW(i,j,k)];
+					L += (double) LAMBDA * LAMBDA * 0.5;
 				}
 				dLdb[indexOfb(i,j)] /= (double) N;
 			}
@@ -442,8 +459,8 @@ void CTraining::Training(int threads)
 			}
 			
 			// show loss func and its difference
-			printf("\nL = %lf\n", L/N);
-			printf("increment of L = %lf...", (L-Lold)/N);
+			printf("\nL = %lf", L);
+			printf("\nincrement of L = %lf...", L-Lold);
 			Lold = L;
 		}
 #endif
@@ -668,7 +685,7 @@ void CTraining::TrainingThreadFunc(int index, int targetlayer)
 	}
 	
 	// calculating gradient for b,W in general
-	for(m=alpha-2; m>=targetlayer; m--)
+	for(m=alpha-2; m>=0; m--)
 	{
 		for(i=0; i<D[alpha]; i++)
 		{
