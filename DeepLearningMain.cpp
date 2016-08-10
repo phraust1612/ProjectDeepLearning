@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include "training.h"
 #include "dataread.h"
-#define VERSION		 1.8
+#define VERSION	1.9
 
 int main()
 {
@@ -99,7 +99,6 @@ int main()
 	{
 		printf("to validate DELTA, input 1\n");
 		printf("to validate LAMBDA, input 2\n");
-		printf("to validate H, input 3\n");
 		printf("to start, input 0\n>> ");
 		scanf("%d", &valid);
 		getchar();
@@ -139,7 +138,7 @@ int main()
 	hTrain.FileSave();
 	
 	// free memories
-	// hTrain.~CTraining();
+	hTrain.FreeMem();
 	printf("end of the programm!!\n");
 	return 0;
 }

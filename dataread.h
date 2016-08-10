@@ -35,5 +35,6 @@ public:
 	int SetMode(FileSetMode mod);
 	int ReadTrainingSet(int validateMode);
 	int ReadTestSet();
+	void FreeData();
 };
 #endif

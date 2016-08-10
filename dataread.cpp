@@ -14,7 +14,9 @@ CDataread::CDataread()
 	yt=NULL;
 }
 
-CDataread::~CDataread()
+CDataread::~CDataread(){}
+
+void CDataread::FreeData()
 {
 	int i;
 	if(x!=NULL)
