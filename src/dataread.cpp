@@ -36,7 +36,7 @@ void CDataread::FreeData()
 int CDataread::SetMode(FileSetMode mod)
 {
 	if(mode = mod) return 0;
-	else return 1;
+	else return ERR_UNAPPROPRIATE_INPUT;
 }
 
 int CDataread::ReadTrainingSet(int validateMode)

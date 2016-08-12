@@ -51,9 +51,7 @@ CTraining::CTraining(CDataread* pD)
 	l = 0;
 	L = 0;
 	sizeW = 0;
-	sizedW = 0;
 	sizeb = 0;
-	sizedb = 0;
 	sizes = 0;
 	W = NULL;
 	dLdW = NULL;
@@ -145,9 +143,19 @@ int CTraining::WeightLoad()
 	err = ERR_NONE;
 	FILE* fpWeight = fopen("TrainedParam", "rb");
 	
-	char magic[2];
-	fread(magic, sizeof(char), 2, fpWeight);
-	if(magic[0] != 'P' || magic[1] != 'D')
+	char magic1,magic2;
+	magic1 = (char) fgetc(fpWeight);
+	magic2 = (char) fgetc(fpWeight);
+	if(magic1 != 'P' || magic2 != 'D')
+	{
+		fclose(fpWeight);
+		return ERR_CRACKED_FILE;
+	}
+	
+	// read version
+	int ver[2];
+	fread(ver, sizeof(int), 2, fpWeight);
+	if(ver[0] != 1 || ver[1] != 9)
 	{
 		fclose(fpWeight);
 		return ERR_CRACKED_FILE;
@@ -160,7 +168,7 @@ int CTraining::WeightLoad()
 	D = (int*) malloc(sizeof(int) * (alpha+1));
 	H = (double*) malloc(sizeof(double) * alpha);
 	fread(D, sizeof(int), alpha+1, fpWeight);
-	fread(&H, sizeof(double), alpha, fpWeight);
+	fread(H, sizeof(double), alpha, fpWeight);
 	
 	fread(&DELTA, sizeof(double), 1, fpWeight);
 	fread(&LAMBDA, sizeof(double), 1, fpWeight);
@@ -247,7 +255,7 @@ int CTraining::indexOfdW(int m, int i, int j, int k)
 	t = indexOfW(m,j,k);
 	if(t<0) return t;
 	ans += t;
-	if(ans>=sizedW) return ERR_WRONGINDEXDW;
+	if(ans>=sizeW) return ERR_WRONGINDEXDW;
 	
 	return ans;
 }
@@ -264,7 +272,7 @@ int CTraining::indexOfdb(int m, int i, int j)
 	if(t<0) return t;
 	
 	ans += t;
-	if(ans>=sizedb) return ERR_WRONGINDEXDB;
+	if(ans>=sizeb) return ERR_WRONGINDEXDB;
 	
 	return ans;
 }
@@ -278,8 +286,6 @@ void CTraining::ParamAllocate()
 	sizeb = 0;
 	for(i=0; i<alpha; i++) sizeb += D[i+1];
 	sizes = sizeb + D[0];
-	sizedW = D[alpha] * sizeW;
-	sizedb = D[alpha] * sizeb;
 	
 	// dLdW[indexOfW(i,j,k)] : dL / dW^i_j,k
 	// dLdb[indexOfb(i,j)] : dL / db^i_j
@@ -406,7 +412,6 @@ void CTraining::Training(int threads)
 					printf("estimated remaining time %d : %d : %d...", hr, min, sec);
 					break;
 				case 'q':
-					printf("\n");
 					count--;
 					l -= threads;
 					cont = false;
@@ -500,9 +505,11 @@ void CTraining::Training(int threads)
 // save alpha, D, W, b at file
 // file format : 
 // offset	type			description
-// 0x0000	4byte integer	alpha
-// 0x0004	4byte integer	D[0]
-// 0x0008	4byte integer	D[1]
+// 0x0000	2byte			magic number : "PD"
+// 0x0002	8byte			version (2 integers) 1 & 9
+// 0x0010	4byte integer	alpha
+// 0x0014	4byte integer	D[0]
+// 0x0018	4byte integer	D[1]
 // 				...
 // 			4byte integer	D[alpha]
 //			8byte double	H[0]
@@ -530,12 +537,16 @@ void CTraining::FileSave()
 	int i, j;
 	FILE* fpResult = fopen("TrainedParam", "wb");
 	char magic[2];
+	int ver[2];
 	magic[0] = 'P';
 	magic[1] = 'D';
+	ver[0] = 1;
+	ver[1] = 9;
 	fwrite(magic, sizeof(char), 2, fpResult);
+	fwrite(ver, sizeof(int), 2, fpResult);
 	fwrite(&alpha, sizeof(int), 1, fpResult);
 	fwrite(D, sizeof(int), alpha+1, fpResult);
-	fwrite(&H, sizeof(double), alpha, fpResult);
+	fwrite(H, sizeof(double), alpha, fpResult);
 	fwrite(&DELTA, sizeof(double), 1, fpResult);
 	fwrite(&LAMBDA, sizeof(double), 1, fpResult);
 	fwrite(&count, sizeof(int), 1, fpResult);
@@ -618,7 +629,7 @@ double CTraining::CheckAccuracy()
 	return highest;
 }
 
-int CTraining::SetHyperparam(ValidationParam validateMode, double hyperparam)
+int CTraining::SetHyperparam(ValidationParam validateMode, int lPar, double hyperparam)
 {
 	switch(validateMode)
 	{
@@ -630,10 +641,11 @@ int CTraining::SetHyperparam(ValidationParam validateMode, double hyperparam)
 	case Lambda:
 		LAMBDA = hyperparam;
 		return 0;
-	/*
 	case LearningrateH:
-		H = hyperparam;
-		return 0;*/
+		if(lPar<0) return ERR_WRONG_VALID_PARAM;
+		if(lPar>=alpha) return ERR_WRONG_VALID_PARAM;
+		H[lPar] = hyperparam;
+		return 0;
 	case LearningSize:
 		learningSize = hyperparam;
 		return 0;
@@ -658,10 +670,10 @@ void CTraining::TrainingThreadFunc(int index, int targetlayer)
 	// s^(i+1) = W^i * delta^i * s^i + b^i
 	double* s = (double*) malloc(sizeof(double) * sizes);
 	// dW[indexOfW(m,i,j,k)] : ds^alpha_i / dW^m_j,k
-	double* dW = (double*) malloc(sizeof(double) * sizedW);
+	double* dW = (double*) malloc(sizeof(double) * sizeW);
 	// db[sizeOfb(m,i,j)] : ds^alpha_i / db^m_j
 	// and this is exactly same as ds^alpha_i / ds^(m+1)_j mathematically
-	double* db = (double*) malloc(sizeof(double) * sizedb);
+	double* db = (double*) malloc(sizeof(double) * sizeb);
 	// this delta is a deltachronical matrix, used at ReLU
 	bool* delta = (bool*) malloc(sizeof(bool) * sizes);
 	

@@ -23,7 +23,7 @@ private:
 	// N is the number of training sets
 	// and Nt is the number of test sets
 	int alpha, N, Nt, *D, count, l, learningSize, loaded;
-	int sizeW, sizeb, sizes, sizedW, sizedb;
+	int sizeW, sizeb, sizes;
 	// H, DELTA, LAMBDA are hyperparameters
 	// dW, db each stands for ds/dW, ds/db matrices
 	double *H, *W, *b, *dLdW, *dLdb, L, Lold, DELTA, LAMBDA;
@@ -52,7 +52,7 @@ public:
 	void ShowHelp();
 	void TrainingThreadFunc(int index, int targetlayer);
 	void FreeMem();
-	int SetHyperparam(ValidationParam validateMode, double hyperparam);
+	int SetHyperparam(ValidationParam validateMode, int lPar, double hyperparam);
 	double CheckAccuracy();
 };
 #endif
