@@ -10,7 +10,6 @@
 #include <thread>
 #define DELTADEFAULT	1.0
 #define LAMBDADEFAULT	0.001
-#define HDEFAULT		0.001
 #define CUDAEXIST	0
 // set CUDAEXIST 1 if you've installed cuda before compiling
 // otherwise set 0
@@ -24,10 +23,10 @@ private:
 	// N is the number of training sets
 	// and Nt is the number of test sets
 	int alpha, N, Nt, *D, count, l, learningSize, loaded;
-	int sizeW, sizeb, sizes, sizedW, sizedb;
+	int sizeW, sizeb, sizes;
 	// H, DELTA, LAMBDA are hyperparameters
 	// dW, db each stands for ds/dW, ds/db matrices
-	double H, *W, *b, *dLdW, *dLdb, L, Lold, DELTA, LAMBDA;
+	double *H, *W, *b, *dLdW, *dLdb, L, Lold, DELTA, LAMBDA;
 	CDataread *pData;
 	void ParamAllocate();
 	int indexOfW(int i, int j, int k);
@@ -52,7 +51,8 @@ public:
 	void FileSave();
 	void ShowHelp();
 	void TrainingThreadFunc(int index, int targetlayer);
-	int SetHyperparam(ValidationParam validateMode, double hyperparam);
+	void FreeMem();
+	int SetHyperparam(ValidationParam validateMode, int lPar, double hyperparam);
 	double CheckAccuracy();
 };
 #endif

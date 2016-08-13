@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include "training.h"
 #include "dataread.h"
-#define VERSION		 1.8
+#define VERSION	1.9
 
 int main()
 {
@@ -20,6 +20,7 @@ int main()
 	scanf("%d", &filemode);
 	getchar();
 	err = hData.SetMode(filemode);
+	printf("err %d\n",err); 
 	if(err < 0)
 	{
 		printf(pdl_error(err));
@@ -37,6 +38,7 @@ int main()
 	if(err < 0)
 	{
 		printf(pdl_error(err));
+		hData.FreeData();
 		system("pause");
 		return err;
 	}
@@ -47,6 +49,7 @@ int main()
 		if(err < 0)
 		{
 			printf(pdl_error(err));
+			hData.FreeData();
 			system("pause");
 			return err;
 		}
@@ -64,7 +67,7 @@ int main()
 	printf(">> ");
 	scanf("%d", &tmp);
 	getchar();
-	if(tmp) err = hTrain.WeightLoad();
+	if(tmp) err = (int) hTrain.WeightLoad();
 	else
 	{
 		// step 4 : set learning size
@@ -82,35 +85,47 @@ int main()
 		{
 			Try = hTrain.CheckAccuracy();
 			printf("accuracy : %2.2lf%%!\n", Try);
+			system("pause");
 			return err;
 		}
 	}
 	if(err < 0)
 	{
 		printf(pdl_error(err));
+		hTrain.FreeMem();
 		system("pause");
 		return err;
 	}
+	printf("err %d\n",err); 
 	printf("Weight parameters load done...\n");
 	
 	// step 5 : choose whetherinput your own hyperparameter values or not
 	valid = None;
 	while(true)
 	{
-		printf("to validate DELTA, input 1\n");
-		printf("to validate LAMBDA, input 2\n");
-		printf("to validate H, input 3\n");
+		tmp = 0;
+		printf("to modify DELTA, input 1\n");
+		printf("to modify LAMBDA, input 2\n");
+		printf("to modify H, input 3\n");
+		printf("to modify learning size, input 4\n");
 		printf("to start, input 0\n>> ");
 		scanf("%d", &valid);
 		getchar();
 		if(valid == None) break;
+		if(valid == LearningrateH)
+		{
+			printf("input which layer you're gonna change\n>> ");
+			scanf("%d", &tmp);
+			getchar();
+		}
 		printf("input your hyperparam value\n>> ");
 		scanf("%lf", &Try);
 		getchar();
-		err = hTrain.SetHyperparam(valid, Try);
+		err = hTrain.SetHyperparam(valid, tmp, Try);
 		if(err < 0)
 		{
 			printf(pdl_error(err));
+			hTrain.FreeMem();
 			system("pause");
 			return err;
 		}
@@ -124,6 +139,7 @@ int main()
 	{
 		err = ERR_UNAPPROPTHREADS;
 		printf(pdl_error(err));
+		hTrain.FreeMem();
 		system("pause");
 		return err;
 	}
@@ -135,11 +151,11 @@ int main()
 	hTrain.Training(tmp);
 	
 	// save trained parameters
-	printf("learning ended...\n");
+	printf("\nlearning ended...");
 	hTrain.FileSave();
 	
 	// free memories
-	// hTrain.~CTraining();
-	printf("end of the programm!!\n");
+	hTrain.FreeMem();
+	printf("\nend of the programm!!");
 	return 0;
 }
