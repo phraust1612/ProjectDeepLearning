@@ -713,8 +713,11 @@ void CTraining::TrainingThreadFunc(int index, int targetlayer)
 			else db[indexOfdb(alpha-1,i,j)] = 0;
 			
 			for(k=0; k<D[alpha-1]; k++)
+			{
 				if(delta[indexOfs(alpha-1,k)])
 					dW[indexOfdW(alpha-1,i,j,k)] = db[indexOfdb(alpha-1,i,j)] * s[indexOfs(alpha-1,k)];
+				else dW[indexOfdW(alpha-1,i,j,k)] = 0;
+			}
 		}
 	}
 	
