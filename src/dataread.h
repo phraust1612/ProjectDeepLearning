@@ -21,15 +21,16 @@ class CDataread
 {
 private:
 	int row, col;
-	FileSetMode mode;
 	int ReadMNISTTrainingSet(int validateMode);
 	int ReadMNISTTestSet();
 	int ReadCIFAR10TrainingSet(int validateMode);
 	int ReadCIFAR10TestSet();
 public:
+	FileSetMode mode;
 	double **x, **xt;
 	unsigned char *y, *yt;
 	int D0, N, M, Nt;
+	bool useValid;
 	CDataread();
 	~CDataread();
 	int SetMode(FileSetMode mod);

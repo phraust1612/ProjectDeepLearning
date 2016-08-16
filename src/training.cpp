@@ -61,6 +61,7 @@ CTraining::CTraining(CDataread* pD)
 	dLdb = NULL;
 	D = NULL;
 	H = NULL;
+	savefilename = NULL;
 }
 
 CTraining::~CTraining(){}
@@ -76,7 +77,7 @@ void CTraining::FreeMem()
 	if(H != NULL) free(H);
 }
 
-int CTraining::WeightInit(int size)
+int CTraining::WeightInit(int size, const char* argv)
 {
 	int i;
 	loaded = 0;
@@ -84,6 +85,7 @@ int CTraining::WeightInit(int size)
 	learningSize=size;
 	DELTA = DELTADEFAULT;
 	LAMBDA = LAMBDADEFAULT;
+	savefilename = argv;
 	printf("input alpha\n>> ");
 	scanf("%d", &alpha);	// number of W's
 	getchar();
@@ -129,11 +131,12 @@ int CTraining::WeightInit(int size)
 	return 0;
 }
 
-int CTraining::WeightLoad()
+int CTraining::WeightLoad(const char* argv)
 {
 	int i,j,err;
 	err = ERR_NONE;
-	FILE* fpWeight = fopen("TrainedParam", "rb");
+	savefilename = argv;
+	FILE* fpWeight = fopen(savefilename, "rb");
 	
 	char magic1,magic2;
 	magic1 = (char) fgetc(fpWeight);
@@ -247,7 +250,7 @@ int CTraining::indexOfdW(int m, int i, int j, int k)
 	t = indexOfW(m,j,k);
 	if(t<0) return t;
 	ans += t;
-	if(ans>=sizeW) return ERR_WRONGINDEXDW;
+	if(ans>=D[alpha] * sizeW) return ERR_WRONGINDEXDW;
 	
 	return ans;
 }
@@ -264,7 +267,7 @@ int CTraining::indexOfdb(int m, int i, int j)
 	if(t<0) return t;
 	
 	ans += t;
-	if(ans>=sizeb) return ERR_WRONGINDEXDB;
+	if(ans>=D[alpha] * sizeb) return ERR_WRONGINDEXDB;
 	
 	return ans;
 }
@@ -529,7 +532,8 @@ void CTraining::Training(int threads)
 void CTraining::FileSave()
 {
 	int i, j;
-	FILE* fpResult = fopen("TrainedParam", "wb");
+	if(savefilename == NULL) return;
+	FILE* fpResult = fopen(savefilename, "wb");
 	char magic[2];
 	int ver[2];
 	magic[0] = 'P';
@@ -694,10 +698,10 @@ void CTraining::TrainingThreadFunc(int index, int targetlayer)
 	// s^(i+1) = W^i * delta^i * s^i + b^i
 	double* s = (double*) malloc(sizeof(double) * sizes);
 	// dW[indexOfW(m,i,j,k)] : ds^alpha_i / dW^m_j,k
-	double* dW = (double*) malloc(sizeof(double) * sizeW);
+	double* dW = (double*) malloc(sizeof(double) * D[alpha] * sizeW);
 	// db[sizeOfb(m,i,j)] : ds^alpha_i / db^m_j
 	// and this is exactly same as ds^alpha_i / ds^(m+1)_j mathematically
-	double* db = (double*) malloc(sizeof(double) * sizeb);
+	double* db = (double*) malloc(sizeof(double) * D[alpha] * sizeb);
 	// this delta is a deltachronical matrix, used at ReLU
 	bool* delta = (bool*) malloc(sizeof(bool) * sizes);
 	
