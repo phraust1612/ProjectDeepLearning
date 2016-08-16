@@ -1,4 +1,6 @@
 #include "training.h"
+int Num,cursor;
+char name[20];
 #if CUDAEXIST
 __global__ void CudaTrainingThread(double *d_W, double *d_b, double *d_dLdW, double *d_dLdb)
 {
@@ -76,7 +78,7 @@ void CTraining::FreeMem()
 
 int CTraining::WeightInit(int size)
 {
-	int i,j,k;
+	int i;
 	loaded = 0;
 	count = 0;
 	learningSize=size;
@@ -113,26 +115,16 @@ int CTraining::WeightInit(int size)
 	// W^i : D_(i+1) x D_i
 	// b^i : D_(i+1)
 	double sumW=0;
-	int numW=0;
-	for(i=0; i<alpha; i++)
+	for(i=0; i<sizeb; i++) b[i] = 0.01;
+	for(i=0; i<sizeW; i++)
 	{
-		for(j=0; j<D[i+1]; j++)
-		{
-			b[indexOfb(i,j)] = 0.01;
-			for(k=0; k<D[i]; k++)
-			{
-				W[indexOfW(i,j,k)] = (double)rand();
-				sumW += W[indexOfW(i,j,k)];
-			}
-		}
-		numW += D[i+1] * D[i];
+		W[i] = (double)rand();
+		sumW += W[i];
 	}
 	// choose random number according to normal distribution
 	// and times sqrt(2/N)
-	for(i=0; i<alpha; i++)
-		for(j=0; j<D[i+1]; j++)
-			for(k=0; k<D[i]; k++)
-				W[indexOfW(i,j,k)] = (sqrt(2) * (W[indexOfW(i,j,k)] - U) * (sumW - (double) numW * U)) / (V * sqrt(N));
+	for(i=0; i<sizeW; i++)
+		W[i] = (sqrt(2) * (W[i] - U) * (sumW - (double) sizeW * U)) / (V * sqrt(N));
 				
 	return 0;
 }
@@ -457,7 +449,7 @@ void CTraining::Training(int threads)
 				{
 					dLdW[indexOfW(i,j,k)] /= (double) N;
 					dLdW[indexOfW(i,j,k)] += LAMBDA * W[indexOfW(i,j,k)];
-					L += (double) LAMBDA * LAMBDA * 0.5;
+					L += LAMBDA * W[indexOfW(i,j,k)] * W[indexOfW(i,j,k)] * 0.5;
 				}
 				dLdb[indexOfb(i,j)] /= (double) N;
 			}
@@ -485,6 +477,8 @@ void CTraining::Training(int threads)
 		}
 #endif
 		// then retry
+		
+		//if(count%10==0) WeightSave();
 	}
 	Key.Stop();
 #if CUDAEXIST
@@ -559,6 +553,36 @@ void CTraining::FileSave()
 	fwrite(dLdW, sizeof(double), sizeW, fpResult);
 	fwrite(dLdb, sizeof(double), sizeb, fpResult);
 	fclose(fpResult);
+}
+
+void CTraining::WeightSave()
+{
+	int i,j,k;
+	FILE *fp;
+	for(i=0; i<alpha; i++)
+	{
+		name[cursor] = Num+48;
+		name[cursor+1] = 'L';
+		name[cursor+2] = i+48;
+		name[cursor+3] = '.';
+		name[cursor+4] = 't';
+		name[cursor+5] = 'x';
+		name[cursor+6] = 't';
+		name[cursor+7] = 0;
+		fp = fopen(name, "w");
+		for(j=0; j<D[i+1]; j++)
+		{
+			for(k=0; k<D[i]; k++) fprintf(fp, "%.6lf\t", W[indexOfW(i,j,k)]);
+			fprintf(fp, "\n");
+		}
+		fclose(fp);
+	}
+	Num++;
+	if(Num>9)
+	{
+		Num=0;
+		cursor++;
+	}
 }
 
 double CTraining::CheckAccuracy()
@@ -713,8 +737,11 @@ void CTraining::TrainingThreadFunc(int index, int targetlayer)
 			else db[indexOfdb(alpha-1,i,j)] = 0;
 			
 			for(k=0; k<D[alpha-1]; k++)
+			{
 				if(delta[indexOfs(alpha-1,k)])
 					dW[indexOfdW(alpha-1,i,j,k)] = db[indexOfdb(alpha-1,i,j)] * s[indexOfs(alpha-1,k)];
+				else dW[indexOfdW(alpha-1,i,j,k)] = 0;
+			}
 		}
 	}
 	

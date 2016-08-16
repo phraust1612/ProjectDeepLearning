@@ -47,6 +47,7 @@ public:
 	~CTraining();
 	int WeightInit(int size);
 	int WeightLoad();
+	void WeightSave();
 	void Training(int threads);
 	void FileSave();
 	void ShowHelp();

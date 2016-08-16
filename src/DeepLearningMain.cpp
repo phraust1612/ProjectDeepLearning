@@ -20,7 +20,6 @@ int main()
 	scanf("%d", &filemode);
 	getchar();
 	err = hData.SetMode(filemode);
-	printf("err %d\n",err); 
 	if(err < 0)
 	{
 		printf(pdl_error(err));
@@ -96,7 +95,6 @@ int main()
 		system("pause");
 		return err;
 	}
-	printf("err %d\n",err); 
 	printf("Weight parameters load done...\n");
 	
 	// step 5 : choose whetherinput your own hyperparameter values or not
