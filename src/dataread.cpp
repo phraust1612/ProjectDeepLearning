@@ -12,6 +12,7 @@ CDataread::CDataread()
 	xt=NULL;
 	y=NULL;
 	yt=NULL;
+	useValid = false;
 }
 
 CDataread::~CDataread(){}
@@ -93,6 +94,7 @@ int CDataread::ReadMNISTTrainingSet(int validateMode)
 	// memory allocation of x, y
 	if(validateMode)
 	{
+		useValid = true;
 		Nt = N - N*0.9;
 		N *= 0.9;
 		// memory allocation of x, y
@@ -236,6 +238,7 @@ int CDataread::ReadCIFAR10TrainingSet(int validateMode)
 	
 	if(validateMode)
 	{
+		useValid = true;
 		Nt = 10000;
 		xt = (double**) malloc(sizeof(double*) * Nt);
 		yt = (unsigned char*) malloc(sizeof(unsigned char) * Nt);

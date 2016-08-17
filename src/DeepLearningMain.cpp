@@ -2,9 +2,9 @@
 #include <stdlib.h>
 #include "training.h"
 #include "dataread.h"
-#define VERSION	1.9
+#define VERSION	2.0
 
-int main()
+int main(int argc, char* argv[])
 {
 	printf("DeepLearning ver %1.1f start\n", VERSION);
 	int tmp, err;
@@ -20,7 +20,6 @@ int main()
 	scanf("%d", &filemode);
 	getchar();
 	err = hData.SetMode(filemode);
-	printf("err %d\n",err); 
 	if(err < 0)
 	{
 		printf(pdl_error(err));
@@ -58,24 +57,30 @@ int main()
 	
 	CTraining hTrain = CTraining(&hData);
 	
-	// step 3 : choose whether load previous weights or not
-	// if inputs 1, load saved data of W and b
-	// otherwise user inputs each dimension of layers
-	// and randomly choose variables of W and b
-	printf("to load previous weight, enter 1\n");
-	printf("or to start with new random var, enter 0\n");
-	printf(">> ");
-	scanf("%d", &tmp);
-	getchar();
-	if(tmp) err = (int) hTrain.WeightLoad();
-	else
+	switch(argc)
 	{
-		// step 4 : set learning size
-		printf("set learning size\n>> ");
-		scanf("%d", &tmp);
-		getchar();
-		err = hTrain.WeightInit(tmp);
+		case 2:
+			// automatically load weight parameters
+			err = (int) hTrain.WeightLoad(argv[1]);
+			break;
+		case 1:
+			// step 3: set your own file's name
+			// it will initiate weight parameters randomly
+			char savefilename[50];
+			printf("set the name of auto saved file\n>> ");
+			scanf("%s", savefilename);
+			getchar();
+			// step 4 : set learning size
+			printf("set learning size\n>> ");
+			scanf("%d", &tmp);
+			getchar();
+			err = hTrain.WeightInit(tmp,savefilename);
+			break;
+		default:
+			err = ERR_WRONGPROGRAMEXEC;
+			break;
 	}
+	
 	if(err == EXC_TRAININGDONE)
 	{
 		printf("training proc's already done, check accuracy and end?\n>> ");
@@ -96,8 +101,6 @@ int main()
 		system("pause");
 		return err;
 	}
-	printf("err %d\n",err); 
-	printf("Weight parameters load done...\n");
 	
 	// step 5 : choose whetherinput your own hyperparameter values or not
 	valid = None;

@@ -78,28 +78,44 @@ int main()
 	fread(W, sizeof(double), sizeW, fp);
 	fread(b, sizeof(double), sizeb, fp);
 	// scan gradients
-	fread(dLdW, sizeof(double), sizeW, fp);
-	fread(dLdb, sizeof(double), sizeb, fp);
+	//fread(dLdW, sizeof(double), sizeW, fp);
+	//fread(dLdb, sizeof(double), sizeb, fp);
+	for(i=0; i<sizeW; i++) dLdW[i] = 0;
+	for(i=0; i<sizeb; i++) dLdb[i] = 0;
 	fclose(fp);
 	
-	for(cursor=0; cursor<34 && name[cursor] != 0; cursor++);
-	for(i=0; i<alpha; i++)
-	{
-		name[cursor] = 'W';
-		name[cursor+1] = i+48;
-		name[cursor+2] = '.';
-		name[cursor+3] = 't';
-		name[cursor+4] = 'x';
-		name[cursor+5] = 't';
-		name[cursor+6] = 0;
-		fp = fopen(name, "w");
-		for(j=0; j<D[i+1]; j++)
-		{
-			for(k=0; k<D[i]; k++) fprintf(fp, "%.6lf\t", W[indexOfW(i,j,k,D)]);
-			fprintf(fp, "\n");
-		}
-		fclose(fp);
-	}
+	fp = fopen(name, "wb");
+	fwrite(&magic1, sizeof(char), 1, fp);
+	fwrite(&magic2, sizeof(char), 1, fp);
+	
+	// read version
+	fwrite(ver, sizeof(int), 2, fp);
+	
+	// scan alpha - the number of layers including score layer
+	fwrite(&alpha, sizeof(int), 1, fp);
+	
+	// scan hyperparameters, etc.
+	fwrite(D, sizeof(int), alpha+1, fp);
+	fwrite(H, sizeof(double), alpha, fp);
+	
+	fwrite(&DELTA, sizeof(double), 1, fp);
+	fwrite(&LAMBDA, sizeof(double), 1, fp);
+	fwrite(&count, sizeof(int), 1, fp);
+	fwrite(&learningSize, sizeof(int), 1, fp);
+	l = 0;
+	L = 0;
+	fwrite(&l, sizeof(int), 1, fp);
+	fwrite(&L, sizeof(double), 1, fp);
+	fwrite(&Lold, sizeof(double), 1, fp);
+	
+	// scan W,b etc
+	fwrite(W, sizeof(double), sizeW, fp);
+	fwrite(b, sizeof(double), sizeb, fp);
+	// scan gradients
+	fwrite(dLdW, sizeof(double), sizeW, fp);
+	fwrite(dLdb, sizeof(double), sizeb, fp);
+	
+	fclose(fp);
 	free(D);
 	free(H);
 	free(W);

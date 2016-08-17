@@ -53,12 +53,14 @@ CTraining::CTraining(CDataread* pD)
 	sizeW = 0;
 	sizeb = 0;
 	sizes = 0;
+	automode = 'n';
 	W = NULL;
 	dLdW = NULL;
 	b = NULL;
 	dLdb = NULL;
 	D = NULL;
 	H = NULL;
+	savefilename = NULL;
 }
 
 CTraining::~CTraining(){}
@@ -74,14 +76,15 @@ void CTraining::FreeMem()
 	if(H != NULL) free(H);
 }
 
-int CTraining::WeightInit(int size)
+int CTraining::WeightInit(int size, char* argv)
 {
-	int i,j,k;
+	int i;
 	loaded = 0;
 	count = 0;
 	learningSize=size;
 	DELTA = DELTADEFAULT;
 	LAMBDA = LAMBDADEFAULT;
+	savefilename = argv;
 	printf("input alpha\n>> ");
 	scanf("%d", &alpha);	// number of W's
 	getchar();
@@ -113,35 +116,26 @@ int CTraining::WeightInit(int size)
 	// W^i : D_(i+1) x D_i
 	// b^i : D_(i+1)
 	double sumW=0;
-	int numW=0;
-	for(i=0; i<alpha; i++)
+	for(i=0; i<sizeb; i++) b[i] = 0.01;
+	for(i=0; i<sizeW; i++)
 	{
-		for(j=0; j<D[i+1]; j++)
-		{
-			b[indexOfb(i,j)] = 0.01;
-			for(k=0; k<D[i]; k++)
-			{
-				W[indexOfW(i,j,k)] = (double)rand();
-				sumW += W[indexOfW(i,j,k)];
-			}
-		}
-		numW += D[i+1] * D[i];
+		W[i] = (double)rand();
+		sumW += W[i];
 	}
 	// choose random number according to normal distribution
 	// and times sqrt(2/N)
-	for(i=0; i<alpha; i++)
-		for(j=0; j<D[i+1]; j++)
-			for(k=0; k<D[i]; k++)
-				W[indexOfW(i,j,k)] = (sqrt(2) * (W[indexOfW(i,j,k)] - U) * (sumW - (double) numW * U)) / (V * sqrt(N));
+	for(i=0; i<sizeW; i++)
+		W[i] = (sqrt(2) * (W[i] - U) * (sumW - (double) sizeW * U)) / (V * sqrt(N));
 				
 	return 0;
 }
 
-int CTraining::WeightLoad()
+int CTraining::WeightLoad(char* argv)
 {
 	int i,j,err;
 	err = ERR_NONE;
-	FILE* fpWeight = fopen("TrainedParam", "rb");
+	savefilename = argv;
+	FILE* fpWeight = fopen(savefilename, "rb");
 	
 	char magic1,magic2;
 	magic1 = (char) fgetc(fpWeight);
@@ -255,7 +249,7 @@ int CTraining::indexOfdW(int m, int i, int j, int k)
 	t = indexOfW(m,j,k);
 	if(t<0) return t;
 	ans += t;
-	if(ans>=sizeW) return ERR_WRONGINDEXDW;
+	if(ans>=D[alpha] * sizeW) return ERR_WRONGINDEXDW;
 	
 	return ans;
 }
@@ -272,7 +266,7 @@ int CTraining::indexOfdb(int m, int i, int j)
 	if(t<0) return t;
 	
 	ans += t;
-	if(ans>=sizeb) return ERR_WRONGINDEXDB;
+	if(ans>=D[alpha] * sizeb) return ERR_WRONGINDEXDB;
 	
 	return ans;
 }
@@ -369,21 +363,25 @@ void CTraining::Training(int threads)
 			{
 				case 's':
 					FileSave();
-					Key.keysave = 'n';
+					Key.keysave = automode;
 					printf("\nsave suceeded...");
+					break;
+				case 't':
+					Key.keysave = automode;
+					if(!WeightSave()) printf("\nWeight parameter save suceeded...");
 					break;
 				case 'c':
 					printf("\nstart testing procedure...");
 					acc = CheckAccuracy();
-					Key.keysave = 'n';
+					Key.keysave = automode;
 					printf("\naccuracy : %2.2lf%%!!!", acc);
 					break;
 				case 'h':
 					ShowHelp();
-					Key.keysave = 'n';
+					Key.keysave = automode;
 					break;
 				case 'p':
-					Key.keysave = 'n';
+					Key.keysave = automode;
 					// compute just proceed and I won't declare any other variables
 					printf("\ncurrently %dth loop's running",count);
 					acc = (double) (l - startindexl + N * (count - startindexcount));
@@ -416,8 +414,16 @@ void CTraining::Training(int threads)
 					l -= threads;
 					cont = false;
 					break;
+				case 'n':
+					automode = 'n';
+					Key.keysave = automode;
+					break;
+				case 'a':
+					automode = 'a';
+					Key.keysave = automode;
+					break;
 				default:
-					Key.keysave = 'n';
+					Key.keysave = automode;
 					break;
 			}
 #if CUDAEXIST
@@ -427,63 +433,65 @@ void CTraining::Training(int threads)
 			// TODO : do it
 #else
 			// run multi-thread via cpu
-			for(i=0; i<threads; i++) hThread[i] = std::thread(&CTraining::TrainingThreadFunc, this, l+i, 0);
+			for(i=0; i<threads; i++) hThread[i] = std::thread(&CTraining::TrainingThreadFunc, this, l+i);
 			for(i=0; i<threads; i++) hThread[i].join();
 			l += threads;
 #endif
 		}
-		
-#if CUDAEXIST
-		// compute L2 regularization on device
-		CudaL2Regularization<<<sizeW, 1>>>(d_dLdW, d_W, (double)N, LAMBDA);
-		CudaL2Regularization<<<sizeb, 1>>>(d_dLdb, d_b, (double)N, 0);
-		
-		// and optimize it
+	
 		if(cont)
-		{
+		{	
+#if CUDAEXIST
+			// compute L2 regularization on device
+			CudaL2Regularization<<<sizeW, 1>>>(d_dLdW, d_W, (double)N, LAMBDA);
+			CudaL2Regularization<<<sizeb, 1>>>(d_dLdb, d_b, (double)N, 0);
+			
+			// and optimize it
 			CudaOptimization<<<sizeW, 1>>>(d_dLdW, d_W, H);
 			CudaOptimization<<<sizeb, 1>>>(d_dLdb, d_b, H);
-		}
 #else
-		//i = target;
-		// L2 regularization
-		L /= (double) N;
-		/* compute only target layer */
-		for(i=0; i<alpha; i++)
-		{
-			for(j=0; j<D[i+1]; j++)
-			{
-				for(k=0; k<D[i]; k++)
-				{
-					dLdW[indexOfW(i,j,k)] /= (double) N;
-					dLdW[indexOfW(i,j,k)] += LAMBDA * W[indexOfW(i,j,k)];
-					L += (double) LAMBDA * LAMBDA * 0.5;
-				}
-				dLdb[indexOfb(i,j)] /= (double) N;
-			}
-		}
-		// calculate gradient of L is done...
-		
-		// optimizing next W, b according to SGD
-		if(cont)
-		{
-		/* compute only target layer */
+			// L2 regularization
+			L /= (double) N;
+			/* compute only target layer */
 			for(i=0; i<alpha; i++)
 			{
-				// optimize each layer's weight individually
 				for(j=0; j<D[i+1]; j++)
 				{
-					for(k=0; k<D[i]; k++) W[indexOfW(i,j,k)] -= (H[i] * dLdW[indexOfW(i,j,k)]);
-					b[indexOfb(i,j)] -= (H[i] * dLdb[indexOfb(i,j)]);
+					for(k=0; k<D[i]; k++)
+					{
+						dLdW[indexOfW(i,j,k)] /= (double) N;
+						dLdW[indexOfW(i,j,k)] += LAMBDA * W[indexOfW(i,j,k)];
+						L += LAMBDA * W[indexOfW(i,j,k)] * W[indexOfW(i,j,k)] * 0.5;
+					}
+					dLdb[indexOfb(i,j)] /= (double) N;
 				}
 			}
+			// calculate gradient of L is done...
 			
-			// show loss func and its difference
-			printf("\nL = %lf", L);
-			printf("\nincrement of L = %lf...", L-Lold);
-			Lold = L;
-		}
+			// optimizing next W, b according to SGD
+			/* compute only target layer */
+				for(i=0; i<alpha; i++)
+				{
+					// optimize each layer's weight individually
+					for(j=0; j<D[i+1]; j++)
+					{
+						for(k=0; k<D[i]; k++) W[indexOfW(i,j,k)] -= (H[i] * dLdW[indexOfW(i,j,k)]);
+						b[indexOfb(i,j)] -= (H[i] * dLdb[indexOfb(i,j)]);
+					}
+				}
+				
+				// show loss func and its difference
+				printf("\nL = %lf", L);
+				printf("\nincrement of L = %lf...", L-Lold);
+				Lold = L;
+				
+			if(Key.keysave == 'a' && count%10 == 0)
+			{
+				FileSave();
+				WeightSave();
+			}
 #endif
+		}
 		// then retry
 	}
 	Key.Stop();
@@ -535,7 +543,8 @@ void CTraining::Training(int threads)
 void CTraining::FileSave()
 {
 	int i, j;
-	FILE* fpResult = fopen("TrainedParam", "wb");
+	if(savefilename == NULL) return;
+	FILE* fpResult = fopen(savefilename, "wb");
 	char magic[2];
 	int ver[2];
 	magic[0] = 'P';
@@ -559,6 +568,53 @@ void CTraining::FileSave()
 	fwrite(dLdW, sizeof(double), sizeW, fpResult);
 	fwrite(dLdb, sizeof(double), sizeb, fpResult);
 	fclose(fpResult);
+}
+
+// return err if fails
+int CTraining::WeightSave()
+{
+	int namesize = 100;
+	char name[namesize];
+	int cursor,i,j,k,printnum;
+	FILE *fp;
+	for(cursor=0; savefilename[cursor] != '.' && savefilename[cursor] != 0; cursor++)
+		name[cursor] = savefilename[cursor];
+//	printf("\ncursor %d",cursor);
+	k = 10000; // maximum figure
+	printnum = count;
+	if(printnum >= 10*k) return ERR_TXTFILENAME;
+	while(k>0)
+	{
+		j = printnum/k;
+		if(j>0)
+		{
+			if(cursor>=namesize) return ERR_TXTFILENAME;
+			name[cursor] = j+48;
+			cursor++;
+			printnum -= j*k;
+		}
+		k /= 10;
+	}
+	if(cursor>=namesize-4) return ERR_TXTFILENAME;
+	
+	for(i=0; i<alpha; i++)
+	{
+		name[cursor] = 'L';
+		name[cursor+1] = i+48;
+		name[cursor+2] = '.';
+		name[cursor+3] = 't';
+		name[cursor+4] = 'x';
+		name[cursor+5] = 't';
+		name[cursor+6] = 0;
+		fp = fopen(name, "w");
+		for(j=0; j<D[i+1]; j++)
+		{
+			for(k=0; k<D[i]; k++) fprintf(fp, "%.6lf\t", W[indexOfW(i,j,k)]);
+			fprintf(fp, "\n");
+		}
+		fclose(fp);
+	}
+	return 0;
 }
 
 double CTraining::CheckAccuracy()
@@ -658,22 +714,30 @@ void CTraining::ShowHelp()
 {
 	printf("\nenter c whenever you want to check accuracy\n");
 	printf("enter s whenever you want to save\n");
+	printf("enter t whenever you want to save into txt files\n");
+	printf("enter a if you want to save every 10 times automatically\n");
+	printf("enter n if you want to stop automatically saving mode\n");
 	printf("enter p whenever you want to check progress\n");
 	printf("enter q whenever you want to quit the program\n");
 	printf("enter h whenever you want to read this help message again...");
 }
 
-void CTraining::TrainingThreadFunc(int index, int targetlayer)
+void CTraining::ConvThreadFunc()
+{
+	
+}
+
+void CTraining::TrainingThreadFunc(int index)
 {
 	int i,j,k,m,tmp;
 	// memory allocation of s, delta, etc
 	// s^(i+1) = W^i * delta^i * s^i + b^i
 	double* s = (double*) malloc(sizeof(double) * sizes);
 	// dW[indexOfW(m,i,j,k)] : ds^alpha_i / dW^m_j,k
-	double* dW = (double*) malloc(sizeof(double) * sizeW);
+	double* dW = (double*) malloc(sizeof(double) * D[alpha] * sizeW);
 	// db[sizeOfb(m,i,j)] : ds^alpha_i / db^m_j
 	// and this is exactly same as ds^alpha_i / ds^(m+1)_j mathematically
-	double* db = (double*) malloc(sizeof(double) * sizeb);
+	double* db = (double*) malloc(sizeof(double) * D[alpha] * sizeb);
 	// this delta is a deltachronical matrix, used at ReLU
 	bool* delta = (bool*) malloc(sizeof(bool) * sizes);
 	
