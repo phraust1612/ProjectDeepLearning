@@ -15,6 +15,7 @@
 #define ERR_WRONGINDEXDW		0x80000011
 #define ERR_WRONGINDEXDB		0x80000012
 #define ERR_WRONGPROGRAMEXEC	0x80000013
+#define ERR_TXTFILENAME			0x80000014
 
 static const char* pdl_error(int Err)
 {

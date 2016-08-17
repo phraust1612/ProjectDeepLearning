@@ -1,6 +1,4 @@
 #include "training.h"
-int Num,cursor;
-char name[20];
 #if CUDAEXIST
 __global__ void CudaTrainingThread(double *d_W, double *d_b, double *d_dLdW, double *d_dLdb)
 {
@@ -55,6 +53,7 @@ CTraining::CTraining(CDataread* pD)
 	sizeW = 0;
 	sizeb = 0;
 	sizes = 0;
+	automode = 'n';
 	W = NULL;
 	dLdW = NULL;
 	b = NULL;
@@ -77,7 +76,7 @@ void CTraining::FreeMem()
 	if(H != NULL) free(H);
 }
 
-int CTraining::WeightInit(int size, const char* argv)
+int CTraining::WeightInit(int size, char* argv)
 {
 	int i;
 	loaded = 0;
@@ -131,7 +130,7 @@ int CTraining::WeightInit(int size, const char* argv)
 	return 0;
 }
 
-int CTraining::WeightLoad(const char* argv)
+int CTraining::WeightLoad(char* argv)
 {
 	int i,j,err;
 	err = ERR_NONE;
@@ -364,21 +363,25 @@ void CTraining::Training(int threads)
 			{
 				case 's':
 					FileSave();
-					Key.keysave = 'n';
+					Key.keysave = automode;
 					printf("\nsave suceeded...");
+					break;
+				case 't':
+					Key.keysave = automode;
+					if(!WeightSave()) printf("\nWeight parameter save suceeded...");
 					break;
 				case 'c':
 					printf("\nstart testing procedure...");
 					acc = CheckAccuracy();
-					Key.keysave = 'n';
+					Key.keysave = automode;
 					printf("\naccuracy : %2.2lf%%!!!", acc);
 					break;
 				case 'h':
 					ShowHelp();
-					Key.keysave = 'n';
+					Key.keysave = automode;
 					break;
 				case 'p':
-					Key.keysave = 'n';
+					Key.keysave = automode;
 					// compute just proceed and I won't declare any other variables
 					printf("\ncurrently %dth loop's running",count);
 					acc = (double) (l - startindexl + N * (count - startindexcount));
@@ -411,8 +414,16 @@ void CTraining::Training(int threads)
 					l -= threads;
 					cont = false;
 					break;
+				case 'n':
+					automode = 'n';
+					Key.keysave = automode;
+					break;
+				case 'a':
+					automode = 'a';
+					Key.keysave = automode;
+					break;
 				default:
-					Key.keysave = 'n';
+					Key.keysave = automode;
 					break;
 			}
 #if CUDAEXIST
@@ -422,66 +433,66 @@ void CTraining::Training(int threads)
 			// TODO : do it
 #else
 			// run multi-thread via cpu
-			for(i=0; i<threads; i++) hThread[i] = std::thread(&CTraining::TrainingThreadFunc, this, l+i, 0);
+			for(i=0; i<threads; i++) hThread[i] = std::thread(&CTraining::TrainingThreadFunc, this, l+i);
 			for(i=0; i<threads; i++) hThread[i].join();
 			l += threads;
 #endif
 		}
-		
-#if CUDAEXIST
-		// compute L2 regularization on device
-		CudaL2Regularization<<<sizeW, 1>>>(d_dLdW, d_W, (double)N, LAMBDA);
-		CudaL2Regularization<<<sizeb, 1>>>(d_dLdb, d_b, (double)N, 0);
-		
-		// and optimize it
+	
 		if(cont)
-		{
+		{	
+#if CUDAEXIST
+			// compute L2 regularization on device
+			CudaL2Regularization<<<sizeW, 1>>>(d_dLdW, d_W, (double)N, LAMBDA);
+			CudaL2Regularization<<<sizeb, 1>>>(d_dLdb, d_b, (double)N, 0);
+			
+			// and optimize it
 			CudaOptimization<<<sizeW, 1>>>(d_dLdW, d_W, H);
 			CudaOptimization<<<sizeb, 1>>>(d_dLdb, d_b, H);
-		}
 #else
-		//i = target;
-		// L2 regularization
-		L /= (double) N;
-		/* compute only target layer */
-		for(i=0; i<alpha; i++)
-		{
-			for(j=0; j<D[i+1]; j++)
-			{
-				for(k=0; k<D[i]; k++)
-				{
-					dLdW[indexOfW(i,j,k)] /= (double) N;
-					dLdW[indexOfW(i,j,k)] += LAMBDA * W[indexOfW(i,j,k)];
-					L += LAMBDA * W[indexOfW(i,j,k)] * W[indexOfW(i,j,k)] * 0.5;
-				}
-				dLdb[indexOfb(i,j)] /= (double) N;
-			}
-		}
-		// calculate gradient of L is done...
-		
-		// optimizing next W, b according to SGD
-		if(cont)
-		{
-		/* compute only target layer */
+			// L2 regularization
+			L /= (double) N;
+			/* compute only target layer */
 			for(i=0; i<alpha; i++)
 			{
-				// optimize each layer's weight individually
 				for(j=0; j<D[i+1]; j++)
 				{
-					for(k=0; k<D[i]; k++) W[indexOfW(i,j,k)] -= (H[i] * dLdW[indexOfW(i,j,k)]);
-					b[indexOfb(i,j)] -= (H[i] * dLdb[indexOfb(i,j)]);
+					for(k=0; k<D[i]; k++)
+					{
+						dLdW[indexOfW(i,j,k)] /= (double) N;
+						dLdW[indexOfW(i,j,k)] += LAMBDA * W[indexOfW(i,j,k)];
+						L += LAMBDA * W[indexOfW(i,j,k)] * W[indexOfW(i,j,k)] * 0.5;
+					}
+					dLdb[indexOfb(i,j)] /= (double) N;
 				}
 			}
+			// calculate gradient of L is done...
 			
-			// show loss func and its difference
-			printf("\nL = %lf", L);
-			printf("\nincrement of L = %lf...", L-Lold);
-			Lold = L;
-		}
+			// optimizing next W, b according to SGD
+			/* compute only target layer */
+				for(i=0; i<alpha; i++)
+				{
+					// optimize each layer's weight individually
+					for(j=0; j<D[i+1]; j++)
+					{
+						for(k=0; k<D[i]; k++) W[indexOfW(i,j,k)] -= (H[i] * dLdW[indexOfW(i,j,k)]);
+						b[indexOfb(i,j)] -= (H[i] * dLdb[indexOfb(i,j)]);
+					}
+				}
+				
+				// show loss func and its difference
+				printf("\nL = %lf", L);
+				printf("\nincrement of L = %lf...", L-Lold);
+				Lold = L;
+				
+			if(Key.keysave == 'a' && count%10 == 0)
+			{
+				FileSave();
+				WeightSave();
+			}
 #endif
+		}
 		// then retry
-		
-		//if(count%10==0) WeightSave();
 	}
 	Key.Stop();
 #if CUDAEXIST
@@ -559,20 +570,42 @@ void CTraining::FileSave()
 	fclose(fpResult);
 }
 
-void CTraining::WeightSave()
+// return err if fails
+int CTraining::WeightSave()
 {
-	int i,j,k;
+	int namesize = 100;
+	char name[namesize];
+	int cursor,i,j,k,printnum;
 	FILE *fp;
+	for(cursor=0; savefilename[cursor] != '.' && savefilename[cursor] != 0; cursor++)
+		name[cursor] = savefilename[cursor];
+//	printf("\ncursor %d",cursor);
+	k = 10000; // maximum figure
+	printnum = count;
+	if(printnum >= 10*k) return ERR_TXTFILENAME;
+	while(k>0)
+	{
+		j = printnum/k;
+		if(j>0)
+		{
+			if(cursor>=namesize) return ERR_TXTFILENAME;
+			name[cursor] = j+48;
+			cursor++;
+			printnum -= j*k;
+		}
+		k /= 10;
+	}
+	if(cursor>=namesize-4) return ERR_TXTFILENAME;
+	
 	for(i=0; i<alpha; i++)
 	{
-		name[cursor] = Num+48;
-		name[cursor+1] = 'L';
-		name[cursor+2] = i+48;
-		name[cursor+3] = '.';
-		name[cursor+4] = 't';
-		name[cursor+5] = 'x';
-		name[cursor+6] = 't';
-		name[cursor+7] = 0;
+		name[cursor] = 'L';
+		name[cursor+1] = i+48;
+		name[cursor+2] = '.';
+		name[cursor+3] = 't';
+		name[cursor+4] = 'x';
+		name[cursor+5] = 't';
+		name[cursor+6] = 0;
 		fp = fopen(name, "w");
 		for(j=0; j<D[i+1]; j++)
 		{
@@ -581,12 +614,7 @@ void CTraining::WeightSave()
 		}
 		fclose(fp);
 	}
-	Num++;
-	if(Num>9)
-	{
-		Num=0;
-		cursor++;
-	}
+	return 0;
 }
 
 double CTraining::CheckAccuracy()
@@ -686,12 +714,20 @@ void CTraining::ShowHelp()
 {
 	printf("\nenter c whenever you want to check accuracy\n");
 	printf("enter s whenever you want to save\n");
+	printf("enter t whenever you want to save into txt files\n");
+	printf("enter a if you want to save every 10 times automatically\n");
+	printf("enter n if you want to stop automatically saving mode\n");
 	printf("enter p whenever you want to check progress\n");
 	printf("enter q whenever you want to quit the program\n");
 	printf("enter h whenever you want to read this help message again...");
 }
 
-void CTraining::TrainingThreadFunc(int index, int targetlayer)
+void CTraining::ConvThreadFunc()
+{
+	
+}
+
+void CTraining::TrainingThreadFunc(int index)
 {
 	int i,j,k,m,tmp;
 	// memory allocation of s, delta, etc

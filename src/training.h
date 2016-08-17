@@ -22,7 +22,7 @@ class CTraining
 private:
 	// N is the number of training sets
 	// and Nt is the number of test sets
-	const char* savefilename;
+	char *savefilename, automode;
 	int alpha, N, Nt, *D, count, l, learningSize, loaded;
 	int sizeW, sizeb, sizes;
 	// H, DELTA, LAMBDA are hyperparameters
@@ -46,13 +46,14 @@ public:
 	
 	CTraining(CDataread* pD);
 	~CTraining();
-	int WeightInit(int size, const char* argv);
-	int WeightLoad(const char* argv);
-	void WeightSave();
+	int WeightInit(int size, char* argv);
+	int WeightLoad(char* argv);
+	int WeightSave();
 	void Training(int threads);
 	void FileSave();
 	void ShowHelp();
-	void TrainingThreadFunc(int index, int targetlayer);
+	void TrainingThreadFunc(int index);
+	void ConvThreadFunc();
 	void FreeMem();
 	int SetHyperparam(ValidationParam validateMode, int lPar, double hyperparam);
 	double CheckAccuracy();

@@ -61,7 +61,7 @@ int main(int argc, char* argv[])
 	{
 		case 2:
 			// automatically load weight parameters
-			err = (int) hTrain.WeightLoad((const char*)argv[1]);
+			err = (int) hTrain.WeightLoad(argv[1]);
 			break;
 		case 1:
 			// step 3: set your own file's name
@@ -74,7 +74,7 @@ int main(int argc, char* argv[])
 			printf("set learning size\n>> ");
 			scanf("%d", &tmp);
 			getchar();
-			err = hTrain.WeightInit(tmp,(const char*)savefilename);
+			err = hTrain.WeightInit(tmp,savefilename);
 			break;
 		default:
 			err = ERR_WRONGPROGRAMEXEC;
