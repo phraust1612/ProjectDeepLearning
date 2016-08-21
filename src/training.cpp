@@ -87,10 +87,10 @@ int CTraining::WeightInit(int size, char* argv)
 	scanf("%d", &A);
 	getchar();
 	printf("input B\n>> ");
-	scanf("%d", &A);
+	scanf("%d", &B);
 	getchar();
 	printf("input C\n>> ");
-	scanf("%d", &A);
+	scanf("%d", &C);
 	getchar();
 	alpha = C+1;
 	if(B) beta = (A+1)*B;
