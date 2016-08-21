@@ -81,11 +81,130 @@ int CTraining::WeightInit(int size, char* argv)
 	int i;
 	learningSize=size;
 	savefilename = argv;
-	printf("input alpha\n>> ");
-	scanf("%d", &alpha);	// number of W's
+	printf("[(CONV -> ReLU) * 'A' -> POOL?] * 'B' -> (FC -> ReLU) * 'C' -> FC\n");
+	printf("if B=0 : (CONV -> ReLU) * A -> (FC -> ReLU) * C -> FC\n");
+	printf("input A\n>> ");
+	scanf("%d", &A);
 	getchar();
+	printf("input B\n>> ");
+	scanf("%d", &A);
+	getchar();
+	printf("input C\n>> ");
+	scanf("%d", &A);
+	getchar();
+	alpha = C+1;
 	
-	D = (int*) malloc(sizeof(int) * (alpha+1));
+	if(B)
+	{
+		Size.width = (int*) malloc(sizeof(int) * ((A+1) * B +1));
+		Size.height = (int*) malloc(sizeof(int) * ((A+1) * B +1));
+		Size.depth = (int*) malloc(sizeof(int) * ((A+1) * B +1));
+	}
+	else
+	{
+		Size.width = (int*) malloc(sizeof(int) * (A+1));
+		Size.height = (int*) malloc(sizeof(int) * (A+1));
+		Size.depth = (int*) malloc(sizeof(int) * (A+1));
+	}
+
+	Size.width[0] = pData->row;
+	Size.height[0] = pData->col;
+	Size.depth[0] = pData->depth;
+	
+	// if use Pooling layer
+	if(B)
+	{
+		for(i=0; i<(A+1)*B; i++)
+		{
+			printf("width_%d : %d, height_%d : %d\n", i, Size.width[i], i, Size.height[i]);
+			// Pooling layer
+			if((i+1)%(A+1) == 0)
+			{
+				while(true)
+				{
+					printf("input F_%d\n>> ", i);
+					scanf("%d", &F[i]);
+					getchar();
+					printf("input S_%d\n>> ", i);
+					scanf("%d", &S[i]);
+					getchar();
+					P[i] = 0;
+					Size.width[i+1] = Size.width[i] - F[i];
+					Size.height[i+1] = Size.height[i] - F[i];
+					if((Size.width[i+1] % S[i]) == 0 && (Size.height[i+1] % S[i]) == 0)
+					{
+						Size.width[i+1] = Size.width[i+1] / S[i] + 1;
+						Size.height[i+1] = Size.height[i+1] / S[i] + 1;
+						break;
+					}
+					else printf("wrong sets...\n");
+				}
+				Size.depth[i+1] = Size.depth[i];
+			}
+			// Convolutional layer
+			else
+			{
+				while(true)
+				{
+					printf("input F_%d\n>> ", i);
+					scanf("%d", &F[i]);
+					getchar();
+					printf("input S_%d\n>> ", i);
+					scanf("%d", &S[i]);
+					getchar();
+					printf("input P_%d\n>> ", i);
+					scanf("%d", &P[i]);
+					getchar();
+					Size.width[i+1] = Size.width[i] - F[i] + 2*P[i];
+					Size.height[i+1] = Size.height[i] - F[i] + 2*P[i];
+					if((Size.width[i+1] % S[i]) == 0 && (Size.height[i+1] % S[i]) == 0)
+					{
+						Size.width[i+1] = Size.width[i+1] / S[i] + 1;
+						Size.height[i+1] = Size.height[i+1] / S[i] + 1;
+						break;
+					}
+					else printf("wrong sets...\n");
+				}
+				printf("input depth_%d\n>> ");
+				scanf("%d", &Size.depth[i+1]);
+				getchar();
+			}
+		}
+	}
+	// for the case if no pooling layer's used
+	else
+	{
+		for(i=0; i<A; i++)
+		{
+			printf("width_%d : %d, height_%d : %d\n", i, Size.width[i], i, Size.height[i]);
+			while(true)
+			{
+				printf("input F_%d\n>> ", i);
+				scanf("%d", &F[i]);
+				getchar();
+				printf("input S_%d\n>> ", i);
+				scanf("%d", &S[i]);
+				getchar();
+				printf("input P_%d\n>> ", i);
+				scanf("%d", &P[i]);
+				getchar();
+				Size.width[i+1] = Size.width[i] - F[i] + 2*P[i];
+				Size.height[i+1] = Size.height[i] - F[i] + 2*P[i];
+				if((Size.width[i+1] % S[i]) == 0 && (Size.height[i+1] % S[i]) == 0)
+				{
+					Size.width[i+1] = Size.width[i+1] / S[i] + 1;
+					Size.height[i+1] = Size.height[i+1] / S[i] + 1;
+					break;
+				}
+				else printf("wrong sets...\n");
+			}
+			printf("input depth_%d\n>> ");
+			scanf("%d", &Size.depth[i+1]);
+			getchar();
+		}
+	}
+	
+	D = (int*) malloc(sizeof(int) * (C+2));
 	D[0] = pData->D0;	// initializing D_0 = D, and D_i is dimension of i'th s
 	D[alpha] = pData->M;	// initializing D_alpha = M
 	// scan D_i's value from user
@@ -803,12 +922,13 @@ void CTraining::ShowHelp()
 	printf("enter h whenever you want to read this help message again...");
 }
 
-void CTraining::ConvThreadFunc(int index)
+void CTraining::ConvThreadFunc()
 {
 	int i,j,k,a,b,c;
 	double *X = (double*)malloc(sizeof(double) * sizeConv);
+	double *confReLU = (double*) malloc(sizeof(double) * sizeConv);
 	
-	for(i=0; i<pData->D0; i++) X[0][i] = pData->x[index][i];
+	for(i=0; i<pData->D0; i++) X[i] = pData->x[index][i];
 
 	// for the case if Pooling layer isn't used
 	if(B == 0)
@@ -822,7 +942,15 @@ void CTraining::ConvThreadFunc(int index)
 				for(i=0; i<F[m]; i++)
 				for(j=0; j<F[m]; j++)
 				for(k=0; k<Size.depth[m]; k++)
+				{
 					X[indexOfX(m+1,a,b,c)] += X[indexOfX(m, a*S[m]+i, b*S[m]+j, k)] * convW[indexOfconvW(m,i,j,k)];
+					if(X[indexOfX(m+1,a,b,c)] > 0) convReLU[indexOfX(m+1,a,b,c)] = 1;
+					else
+					{
+						X[indexOfX(m+1,a,b,c)] = 0;
+						convReLU[indexOfX(m+1,a,b,c)] = 0;
+					}
+				}
 			}
 	}
 	else
@@ -835,7 +963,13 @@ void CTraining::ConvThreadFunc(int index)
 			for(b=0; b<Size.height[m+1]; b++)
 			for(c=0; c<Size.depth[m+1]; c++)
 			{
-				
+				X[indexOfX(m+1,a,b,c)] = 0;
+				for(i=a*S[m]; i<a*S[m]+F[m]; i++)
+				for(j=b*S[m]; j<b*S[m]+F[m]; j++)
+				if(X[indexOfX(m+1,a,b,c)] < X[indexOfX(m,i,j,c)])
+				{
+					X[indexOfX(m+1,a,b,c)] = X[indexOfX(m,i,j,c)];
+				}
 			}
 			
 			// Conv layer
@@ -844,12 +978,18 @@ void CTraining::ConvThreadFunc(int index)
 			for(b=0; b<Size.height[m+1]; b++)
 			for(c=0; c<Size.depth[m+1]; c++)
 			{
-				X[indexOfX(m+1,a,b,c)] = 0;
-				for(i=a*S[m]; i<a*S[m]+F[m]; i++)
-				for(j=b*S[m]; j<b*S[m]+F[m]; j++)
-				if(X[indexOfX(m+1,a,b,c)] < X[indexOfX(m,i,j,c)])
+				X[indexOfX(m+1,a,b,c)] = convb[indexOfconvb(m,c)];
+				for(i=0; i<F[m]; i++)
+				for(j=0; j<F[m]; j++)
+				for(k=0; k<Size.depth[m]; k++)
 				{
-					X[indexOfX(m+1,a,b,c)] = X[indexOfX(m,i,j,c)];
+					X[indexOfX(m+1,a,b,c)] += X[indexOfX(m, a*S[m]+i, b*S[m]+j, k)] * convW[indexOfconvW(m,i,j,k)];
+					if(X[indexOfX(m+1,a,b,c)] > 0) convReLU[indexOfX(m+1,a,b,c)] = 1;
+					else
+					{
+						X[indexOfX(m+1,a,b,c)] = 0;
+						convReLU[indexOfX(m+1,a,b,c)] = 0;
+					}
 				}
 			}
 		}

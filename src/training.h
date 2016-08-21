@@ -20,9 +20,9 @@
 #endif
 typedef struct
 {
-	int *width,
-	int *height,
-	int *depth
+	int *width;
+	int *height;
+	int *depth;
 }ConvSizeStruct;
 
 class CTraining
@@ -33,7 +33,7 @@ private:
 	// N is the number of training sets
 	// and Nt is the number of test sets
 	// D is the dimension of each layer (D[0] becomes the dimension of input layer)
-	int alpha, N, Nt, *D, count, l, learningSize, loaded;
+	int A, B, C, *D, *F, *S, *P, alpha, N, Nt, count, l, learningSize, loaded;
 	// each value is the size of W,b,s
 	int sizeW, sizeb, sizes;
 	// dW, db each stands for ds/dW, ds/db matrices
