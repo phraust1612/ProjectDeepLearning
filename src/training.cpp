@@ -63,6 +63,9 @@ CTraining::CTraining(CDataread* pD)
 	b = NULL;
 	dLdb = NULL;
 	convb = NULL;
+	width = NULL;
+	height = NULL;
+	depth = NULL;
 	D = NULL;
 	savefilename = NULL;
 }
@@ -80,6 +83,9 @@ void CTraining::FreeMem()
 	if(dLdb != NULL) free(dLdb);
 	if(vecdb != NULL) free(vecdb);
 	if(convb != NULL) free(convb);
+	if(width != NULL) free(width);
+	if(height != NULL) free(height);
+	if(depth != NULL) free(depth);
 	if(D != NULL) free(D);
 }
 
@@ -103,17 +109,17 @@ int CTraining::WeightInit(int size, char* argv)
 	if(B) beta = (A+1)*B;
 	else beta = A;
 	
-	Size.width = (int*) malloc(sizeof(int) * (beta+1));
-	Size.height = (int*) malloc(sizeof(int) * (beta+1));
-	Size.depth = (int*) malloc(sizeof(int) * (beta+1));
+	width = (int*) malloc(sizeof(int) * (beta+1));
+	height = (int*) malloc(sizeof(int) * (beta+1));
+	depth = (int*) malloc(sizeof(int) * (beta+1));
 
-	Size.width[0] = pData->row;
-	Size.height[0] = pData->col;
-	Size.depth[0] = pData->depth;
+	width[0] = pData->row;
+	height[0] = pData->col;
+	depth[0] = pData->depth;
 	
 	for(i=0; i<beta; i++)
 	{
-		printf("width_%d : %d, height_%d : %d\n", i, Size.width[i], i, Size.height[i]);
+		printf("width_%d : %d, height_%d : %d\n", i, width[i], i, height[i]);
 		// Pooling layer
 		if((B>0) && ((i+1)%(A+1) == 0))
 		{
@@ -127,17 +133,17 @@ int CTraining::WeightInit(int size, char* argv)
 				scanf("%d", &S[i]);
 				getchar();
 				P[i] = 0;
-				Size.width[i+1] = Size.width[i] - F[i];
-				Size.height[i+1] = Size.height[i] - F[i];
-				if((Size.width[i+1] % S[i]) == 0 && (Size.height[i+1] % S[i]) == 0)
+				width[i+1] = width[i] - F[i];
+				height[i+1] = height[i] - F[i];
+				if((width[i+1] % S[i]) == 0 && (height[i+1] % S[i]) == 0)
 				{
-					Size.width[i+1] = Size.width[i+1] / S[i] + 1;
-					Size.height[i+1] = Size.height[i+1] / S[i] + 1;
+					width[i+1] = width[i+1] / S[i] + 1;
+					height[i+1] = height[i+1] / S[i] + 1;
 					break;
 				}
 				else printf("wrong sets...\n");
 			}
-			Size.depth[i+1] = Size.depth[i];
+			depth[i+1] = depth[i];
 		}
 		// Convolutional layer
 		else
@@ -154,18 +160,18 @@ int CTraining::WeightInit(int size, char* argv)
 				printf("input P_%d\n>> ", i);
 				scanf("%d", &P[i]);
 				getchar();
-				Size.width[i+1] = Size.width[i] - F[i] + 2*P[i];
-				Size.height[i+1] = Size.height[i] - F[i] + 2*P[i];
-				if((Size.width[i+1] % S[i]) == 0 && (Size.height[i+1] % S[i]) == 0)
+				width[i+1] = width[i] - F[i] + 2*P[i];
+				height[i+1] = height[i] - F[i] + 2*P[i];
+				if((width[i+1] % S[i]) == 0 && (height[i+1] % S[i]) == 0)
 				{
-					Size.width[i+1] = Size.width[i+1] / S[i] + 1;
-					Size.height[i+1] = Size.height[i+1] / S[i] + 1;
+					width[i+1] = width[i+1] / S[i] + 1;
+					height[i+1] = height[i+1] / S[i] + 1;
 					break;
 				}
 				else printf("wrong sets...\n");
 			}
 			printf("input depth_%d\n>> ");
-			scanf("%d", &Size.depth[i+1]);
+			scanf("%d", &depth[i+1]);
 			getchar();
 		}
 	}
@@ -384,9 +390,9 @@ void CTraining::ParamAllocate()
 	sizeConv = 0;
 	sizeConvW = 0;
 	sizeConvb = 0;
-	for(i=0; i<=beta; i++) sizeConv += Size.width[i] * Size.height[i] * Size.depth[i];
+	for(i=0; i<=beta; i++) sizeConv += width[i] * height[i] * depth[i];
 	for(i=0; i<beta; i++) sizeConvW += F[i];
-	for(i=0; i<beta; i++) sizeConvb += Size.depth[i+1];
+	for(i=0; i<beta; i++) sizeConvb += depth[i+1];
 	
 	// dLdW[indexOfW(i,j,k)] : dL / dW^i_j,k
 	// dLdb[indexOfb(i,j)] : dL / db^i_j
@@ -933,9 +939,9 @@ void CTraining::ConvThreadFunc(int index)
 	{
 		// Pooling layer
 		if((B>0) && ((i+1)%(A+1) == 0))
-		for(a=0; a<Size.width[m+1]; a++)
-		for(b=0; b<Size.height[m+1]; b++)
-		for(c=0; c<Size.depth[m+1]; c++)
+		for(a=0; a<width[m+1]; a++)
+		for(b=0; b<height[m+1]; b++)
+		for(c=0; c<depth[m+1]; c++)
 		{
 			X[indexOfX(m+1,a,b,c)] = 0;
 			for(i=a*S[m]; i<a*S[m]+F[m]; i++)
@@ -948,14 +954,14 @@ void CTraining::ConvThreadFunc(int index)
 		
 		// Conv layer
 		else
-		for(a=0; a<Size.width[m+1]; a++)
-		for(b=0; b<Size.height[m+1]; b++)
-		for(c=0; c<Size.depth[m+1]; c++)
+		for(a=0; a<width[m+1]; a++)
+		for(b=0; b<height[m+1]; b++)
+		for(c=0; c<depth[m+1]; c++)
 		{
 			X[indexOfX(m+1,a,b,c)] = convb[indexOfconvb(m,c)];
 			for(i=0; i<F[m]; i++)
 			for(j=0; j<F[m]; j++)
-			for(k=0; k<Size.depth[m]; k++)
+			for(k=0; k<depth[m]; k++)
 			{
 				X[indexOfX(m+1,a,b,c)] += X[indexOfX(m, a*S[m]+i, b*S[m]+j, k)] * convW[indexOfconvW(m,i,j,k)];
 				if(X[indexOfX(m+1,a,b,c)] > 0) convReLU[indexOfX(m+1,a,b,c)] = 1;

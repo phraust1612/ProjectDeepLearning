@@ -18,13 +18,6 @@
 #if CUDAEXIST
 #include <cuda.h>
 #endif
-typedef struct
-{
-	int *width;
-	int *height;
-	int *depth;
-}ConvSizeStruct;
-
 class CTraining
 {
 private:
@@ -34,6 +27,7 @@ private:
 	// and Nt is the number of test sets
 	// D is the dimension of each layer (D[0] becomes the dimension of input layer)
 	int A, B, C, *D, *F, *S, *P, alpha, beta, N, Nt, count, l, learningSize, loaded;
+	int *width, *height, *depth;
 	// each value is the size of W,b,s
 	int sizeW, sizeb, sizes, sizeConv, sizeConvW, sizeConvb;
 	// dW, db each stands for ds/dW, ds/db matrices
@@ -58,7 +52,6 @@ private:
 	double XValueOfIndex(double *pt, int m, int i, int j, int k);
 	double GradientCheck();
 	CKeyinter Key;
-	ConvSizeStruct Size;
 #if CUDAEXIST
 #define CUDABLOCKS	1000
 	cudaError_t cuda_err;
