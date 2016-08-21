@@ -33,14 +33,14 @@ private:
 	// N is the number of training sets
 	// and Nt is the number of test sets
 	// D is the dimension of each layer (D[0] becomes the dimension of input layer)
-	int A, B, C, *D, *F, *S, *P, alpha, N, Nt, count, l, learningSize, loaded;
+	int A, B, C, *D, *F, *S, *P, alpha, beta, N, Nt, count, l, learningSize, loaded;
 	// each value is the size of W,b,s
-	int sizeW, sizeb, sizes;
+	int sizeW, sizeb, sizes, sizeConv, sizeConvW, sizeConvb;
 	// dW, db each stands for ds/dW, ds/db matrices
 	// dLdW, dLdb corresponds to dL/dW, dL/db
 	// vecdW, vecdb are used for momentum update
 	// olddLdW, olddLdb, oldvecdW, oldvecdb are used for gradient check
-	double *W, *b, *dLdW, *dLdb, *vecdW, *vecdb;
+	double *W, *b, *dLdW, *dLdb, *vecdW, *vecdb, *convW, *convb;
 	// DELTA, LAMBDA, MOMENTUMUPDATE are hyperparameters
 	// L is loss function value, Lold is previous loss value
 	// H is the learning rate, which is also kind of hyperparameters
@@ -52,6 +52,10 @@ private:
 	int indexOfs(int i, int j);
 	int indexOfdW(int m, int i, int j, int k);
 	int indexOfdb(int m, int i, int j);
+	int indexOfX(int m, int i, int j, int k);
+	int indexOfconvW(int m, int i, int j, int k);
+	int indexOfconvb(int m, int c);
+	double XValueOfIndex(double *pt, int m, int i, int j, int k);
 	double GradientCheck();
 	CKeyinter Key;
 	ConvSizeStruct Size;
@@ -71,8 +75,8 @@ public:
 	void Training(int threads);
 	void FileSave();
 	void ShowHelp();
-	int TrainingThreadFunc(int index);
-	void ConvThreadFunc();
+	int FCThreadFunc(double *xpt, int index);
+	void ConvThreadFunc(int index);
 	void FreeMem();
 	int SetHyperparam(ValidationParam validateMode, int lPar, double hyperparam);
 	double CheckAccuracy();
