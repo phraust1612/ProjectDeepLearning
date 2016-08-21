@@ -58,8 +58,11 @@ CTraining::CTraining(CDataread* pD)
 	automode = 'n';
 	W = NULL;
 	dLdW = NULL;
+	vecdW = NULL;
+	convW = NULL;
 	b = NULL;
 	dLdb = NULL;
+	convb = NULL;
 	D = NULL;
 	savefilename = NULL;
 }
@@ -71,8 +74,12 @@ void CTraining::FreeMem()
 	pData->FreeData();
 	if(W != NULL) free(W);
 	if(dLdW != NULL) free(dLdW);
+	if(vecdW != NULL) free(vecdW);
+	if(convW != NULL) free(convW);
 	if(b != NULL) free(b);
 	if(dLdb != NULL) free(dLdb);
+	if(vecdb != NULL) free(vecdb);
+	if(convb != NULL) free(convb);
 	if(D != NULL) free(D);
 }
 
