@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include "training.h"
 #include "dataread.h"
-#define VERSION	2.0
+#define VERSION	2.1
 
 int main(int argc, char* argv[])
 {
@@ -106,25 +106,19 @@ int main(int argc, char* argv[])
 	valid = None;
 	while(true)
 	{
-		tmp = 0;
 		printf("to modify DELTA, input 1\n");
 		printf("to modify LAMBDA, input 2\n");
 		printf("to modify H, input 3\n");
 		printf("to modify learning size, input 4\n");
+		printf("to modify momentum update constance, input 5\n");
 		printf("to start, input 0\n>> ");
 		scanf("%d", &valid);
 		getchar();
 		if(valid == None) break;
-		if(valid == LearningrateH)
-		{
-			printf("input which layer you're gonna change\n>> ");
-			scanf("%d", &tmp);
-			getchar();
-		}
 		printf("input your hyperparam value\n>> ");
 		scanf("%lf", &Try);
 		getchar();
-		err = hTrain.SetHyperparam(valid, tmp, Try);
+		err = hTrain.SetHyperparam(valid, 0, Try);
 		if(err < 0)
 		{
 			printf(pdl_error(err));
@@ -150,7 +144,7 @@ int main(int argc, char* argv[])
 	// step 7 : start training
 	// input q to quit or other commands
 	printf("start learning procedure...");
-	hTrain.ShowHelp();
+	printf("\npress h for help");
 	hTrain.Training(tmp);
 	
 	// save trained parameters

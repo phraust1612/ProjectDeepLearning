@@ -14,13 +14,13 @@ typedef enum
 	Delta,
 	Lambda,
 	LearningrateH,
-	LearningSize
+	LearningSize,
+	MomentumUpdate
 }ValidationParam;
 
 class CDataread
 {
 private:
-	int row, col;
 	int ReadMNISTTrainingSet(int validateMode);
 	int ReadMNISTTestSet();
 	int ReadCIFAR10TrainingSet(int validateMode);
@@ -29,7 +29,7 @@ public:
 	FileSetMode mode;
 	double **x, **xt;
 	unsigned char *y, *yt;
-	int D0, N, M, Nt;
+	int D0, N, M, Nt, row, col, depth;
 	bool useValid;
 	CDataread();
 	~CDataread();

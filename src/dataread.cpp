@@ -4,14 +4,15 @@
 CDataread::CDataread()
 {
 	mode = MNIST;
-	N=0;
-	Nt=0;
-	row=0;
-	col=0;
-	x=NULL;
-	xt=NULL;
-	y=NULL;
-	yt=NULL;
+	N = 0;
+	Nt = 0;
+	row = 0;
+	col = 0;
+	depth = 1;
+	x = NULL;
+	xt = NULL;
+	y = NULL;
+	yt = NULL;
 	useValid = false;
 }
 

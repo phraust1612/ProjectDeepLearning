@@ -16,6 +16,8 @@
 #define ERR_WRONGINDEXDB		0x80000012
 #define ERR_WRONGPROGRAMEXEC	0x80000013
 #define ERR_TXTFILENAME			0x80000014
+#define ERR_WRONGFCTHREADINDEX	0x80000015
+#define ERR_NOTSUPPORTEDVERSION 0x80000016
 
 static const char* pdl_error(int Err)
 {
@@ -37,6 +39,8 @@ static const char* pdl_error(int Err)
 			return "saved file cracked\n";
 		case ERR_UNAPPROPTHREADS:
 			return "you must use at least one thread!\n";
+		case ERR_WRONGFCTHREADINDEX:
+			return "wrong fc layer thread index";
 		default:
 			return "unknown error code\n";
 	}

@@ -45,8 +45,10 @@ CTraining::CTraining(CDataread* pD)
 	alpha = 1;
 	learningSize = 0;
 	count = 0;
-	DELTA = 0;
-	LAMBDA = 0;
+	DELTA = DELTADEFAULT;
+	LAMBDA = LAMBDADEFAULT;
+	H = HDEFAULT;
+	MOMENTUMUPDATE = MUDEFAULT;
 	Lold = 0;
 	l = 0;
 	L = 0;
@@ -59,7 +61,6 @@ CTraining::CTraining(CDataread* pD)
 	b = NULL;
 	dLdb = NULL;
 	D = NULL;
-	H = NULL;
 	savefilename = NULL;
 }
 
@@ -73,24 +74,18 @@ void CTraining::FreeMem()
 	if(b != NULL) free(b);
 	if(dLdb != NULL) free(dLdb);
 	if(D != NULL) free(D);
-	if(H != NULL) free(H);
 }
 
 int CTraining::WeightInit(int size, char* argv)
 {
 	int i;
-	loaded = 0;
-	count = 0;
 	learningSize=size;
-	DELTA = DELTADEFAULT;
-	LAMBDA = LAMBDADEFAULT;
 	savefilename = argv;
 	printf("input alpha\n>> ");
 	scanf("%d", &alpha);	// number of W's
 	getchar();
 	
 	D = (int*) malloc(sizeof(int) * (alpha+1));
-	H = (double*) malloc(sizeof(double) * alpha);
 	D[0] = pData->D0;	// initializing D_0 = D, and D_i is dimension of i'th s
 	D[alpha] = pData->M;	// initializing D_alpha = M
 	// scan D_i's value from user
@@ -100,12 +95,7 @@ int CTraining::WeightInit(int size, char* argv)
 		scanf("%d", &D[i]);
 		getchar();
 	}
-	for(i=0; i<alpha; i++)
-	{
-		printf("intput H_%d\n>> ", i);
-		scanf("%lf", &H[i]);
-		getchar();
-	}
+	
 	ParamAllocate();
 	
 	double U, V;
@@ -149,23 +139,21 @@ int CTraining::WeightLoad(char* argv)
 	// read version
 	int ver[2];
 	fread(ver, sizeof(int), 2, fpWeight);
-	if(ver[0] != 1 || ver[1] != 9)
+	if(ver[0] != 2 || ver[1] != 1)
 	{
 		fclose(fpWeight);
-		return ERR_CRACKED_FILE;
+		return ERR_NOTSUPPORTEDVERSION;
 	}
 	
 	// scan alpha - the number of layers including score layer
 	fread(&alpha, sizeof(int), 1, fpWeight);
-	
 	// scan hyperparameters, etc.
 	D = (int*) malloc(sizeof(int) * (alpha+1));
-	H = (double*) malloc(sizeof(double) * alpha);
 	fread(D, sizeof(int), alpha+1, fpWeight);
-	fread(H, sizeof(double), alpha, fpWeight);
-	
+	fread(&H, sizeof(double), 1, fpWeight);
 	fread(&DELTA, sizeof(double), 1, fpWeight);
 	fread(&LAMBDA, sizeof(double), 1, fpWeight);
+	fread(&MOMENTUMUPDATE, sizeof(double), 1, fpWeight);
 	fread(&count, sizeof(int), 1, fpWeight);
 	fread(&learningSize, sizeof(int), 1, fpWeight);
 	if(count == learningSize) err = EXC_TRAININGDONE;
@@ -182,6 +170,8 @@ int CTraining::WeightLoad(char* argv)
 	// scan gradients
 	fread(dLdW, sizeof(double), sizeW, fpWeight);
 	fread(dLdb, sizeof(double), sizeb, fpWeight);
+	fread(vecdW, sizeof(double), sizeW, fpWeight);
+	fread(vecdb, sizeof(double), sizeb, fpWeight);
 	fclose(fpWeight);
 	loaded=1;
 	
@@ -287,15 +277,19 @@ void CTraining::ParamAllocate()
 	b = (double*) malloc(sizeof(double) * sizeb);
 	dLdW = (double*) malloc(sizeof(double) * sizeW);
 	dLdb = (double*) malloc(sizeof(double) * sizeb);
+	vecdW = (double*) malloc(sizeof(double) * sizeW);
+	vecdb = (double*) malloc(sizeof(double) * sizeb);
 	
 	// initialize dL/db and dL/dW
-	for(i=0; i<alpha; i++)
+	for(i=0; i<sizeb; i++)
 	{
-		for(j=0; j<D[i+1]; j++)
-		{
-			dLdb[indexOfb(i,j)] = 0;
-			for(k=0; k<D[i]; k++) dLdW[indexOfW(i,j,k)] = 0;
-		}
+		dLdb[i] = 0;
+		vecdb[i]=0;
+	}
+	for(i=0; i<sizeW; i++)
+	{
+		dLdW[i] = 0;
+		vecdW[i]=0;
 	}
 }
 
@@ -341,14 +335,10 @@ void CTraining::Training(int threads)
 			CudaResetGradients<<<sizeW, 1>>>(d_dLdW);
 			CudaResetGradients<<<sizeb, 1>>>(d_dLdb);
 #else
-			for(i=0; i<alpha && cont; i++)
-			{
-				for(j=0; j<D[i+1]; j++)
-				{
-					dLdb[indexOfb(i,j)] = 0;
-					for(k=0; k<D[i]; k++) dLdW[indexOfW(i,j,k)] = 0;
-				}
-			}
+			for(i=0; i<sizeW; i++)
+				dLdW[i] = 0;
+			for(i=0; i<sizeb; i++)
+				dLdb[i] = 0;
 #endif
 		}
 		loaded = 0;
@@ -411,15 +401,26 @@ void CTraining::Training(int threads)
 					break;
 				case 'q':
 					count--;
-					l -= threads;
 					cont = false;
 					break;
 				case 'n':
+					if(automode != 'n') printf("\nmode off...");
 					automode = 'n';
 					Key.keysave = automode;
 					break;
 				case 'a':
+					if(automode != 'a') printf("\nauto save mode...");
 					automode = 'a';
+					Key.keysave = automode;
+					break;
+				case 'g':
+					if(automode != 'g') printf("\ngradient check mode...");
+					automode = 'g';
+					Key.keysave = automode;
+					break;
+				case 'm':
+					if(automode != 'm') printf("\nmodify parameter mode...");
+					automode = 'm';
 					Key.keysave = automode;
 					break;
 				default:
@@ -433,9 +434,12 @@ void CTraining::Training(int threads)
 			// TODO : do it
 #else
 			// run multi-thread via cpu
-			for(i=0; i<threads; i++) hThread[i] = std::thread(&CTraining::TrainingThreadFunc, this, l+i);
-			for(i=0; i<threads; i++) hThread[i].join();
-			l += threads;
+			if(cont)
+			{
+				for(i=0; i<threads && l+i<N; i++) hThread[i] = std::thread(&CTraining::TrainingThreadFunc, this, l+i);
+				for(i=0; i<threads && l+i<N; i++) hThread[i].join();
+				l += threads;
+			}
 #endif
 		}
 	
@@ -451,45 +455,58 @@ void CTraining::Training(int threads)
 			CudaOptimization<<<sizeb, 1>>>(d_dLdb, d_b, H);
 #else
 			// L2 regularization
+			// and optimize next W, b according to momentum update
+			// if you set MOMENTUMUPDATE as 0, it works exactly same as SGD
 			L /= (double) N;
-			/* compute only target layer */
-			for(i=0; i<alpha; i++)
+			for(i=0; i<sizeW; i++)
 			{
-				for(j=0; j<D[i+1]; j++)
-				{
-					for(k=0; k<D[i]; k++)
-					{
-						dLdW[indexOfW(i,j,k)] /= (double) N;
-						dLdW[indexOfW(i,j,k)] += LAMBDA * W[indexOfW(i,j,k)];
-						L += LAMBDA * W[indexOfW(i,j,k)] * W[indexOfW(i,j,k)] * 0.5;
-					}
-					dLdb[indexOfb(i,j)] /= (double) N;
-				}
+				dLdW[i] /= (double) N;
+				dLdW[i] += LAMBDA * W[i];
+				L += LAMBDA * W[i] * W[i] * 0.5;
+				vecdW[i] = MOMENTUMUPDATE * vecdW[i] - H * dLdW[i];
+				W[i] += vecdW[i];
 			}
-			// calculate gradient of L is done...
+			for(i=0; i<sizeb; i++)
+			{
+				dLdb[i] /= (double) N;
+				vecdb[i] = MOMENTUMUPDATE * vecdb[i] - H * dLdb[i];
+				b[i] += vecdb[i];
+			}
 			
-			// optimizing next W, b according to SGD
-			/* compute only target layer */
-				for(i=0; i<alpha; i++)
-				{
-					// optimize each layer's weight individually
-					for(j=0; j<D[i+1]; j++)
-					{
-						for(k=0; k<D[i]; k++) W[indexOfW(i,j,k)] -= (H[i] * dLdW[indexOfW(i,j,k)]);
-						b[indexOfb(i,j)] -= (H[i] * dLdb[indexOfb(i,j)]);
-					}
-				}
+			// show loss func and its difference with previous one
+			printf("\nL = %lf", L);
+			printf("\nincrement of L = %lf...", L-Lold);
 				
-				// show loss func and its difference
-				printf("\nL = %lf", L);
-				printf("\nincrement of L = %lf...", L-Lold);
-				Lold = L;
-				
-			if(Key.keysave == 'a' && count%10 == 0)
+			if(automode == 'a' && count%10 == 0)
 			{
 				FileSave();
 				WeightSave();
 			}
+			if(automode == 'g')
+			{
+				Try = GradientCheck();
+				printf("\ngradient check : %lf...", Try);
+			}
+			if(automode == 'm')
+			{
+				printf("\nto modify DELTA, input 1\n");
+				printf("to modify LAMBDA, input 2\n");
+				printf("to modify H, input 3\n");
+				printf("to modify learning size, input 4\n");
+				printf("to modify momentum update constance, input 5\n");
+				printf("to continue, input 0\n>> ");
+				scanf("%d", &valid);
+				getchar();
+				if(valid != None)
+				{
+					printf("input your hyperparam value\n>> ");
+					scanf("%lf", &Try);
+					getchar();
+					SetHyperparam(valid, 0, Try);
+				}
+			}
+			Lold = L;
+			L=0;
 #endif
 		}
 		// then retry
@@ -514,32 +531,39 @@ void CTraining::Training(int threads)
 // file format : 
 // offset	type			description
 // 0x0000	2byte			magic number : "PD"
-// 0x0002	8byte			version (2 integers) 1 & 9
+// 0x0002	8byte			version (2 integers) 2 & 1
 // 0x0010	4byte integer	alpha
 // 0x0014	4byte integer	D[0]
 // 0x0018	4byte integer	D[1]
 // 				...
 // 			4byte integer	D[alpha]
-//			8byte double	H[0]
-//				...
-//			8byte double	H[alpha-1]
+//			8byte double	H
 //			8byte double	DELTA
 //			8byte double	LAMBDA
+//			8byte double	MOMENTUMUPDATE
 //			4byte integer	count
 //			4byte integer	learningsize
 //			4byte int		l (do not write behind if training ended)
 //			8byte double	L
 //			8byte double	Lold
-//			8byte double	W[0][0][0]
+//			8byte double	W[0]
 //				...
-//			8byte double	W[alpha-1][D[alpha]][D[alpha-1]]
-//			8byte double	b[0][0]
+//			8byte double	W[sizeW-1]
+//			8byte double	b[0]
 //				...
-//			8byte double	dLdW[0][0][0]
+//			8byte double	b[sizeb-1]
+//			8byte double	dLdW[0]
 //				...
-//			8byte double	dLdW[alpha-1][D[alpha]][D[alpha-1]]
-//			8byte double	dLdb[0][0]
+//			8byte double	dLdW[sizeW-1]
+//			8byte double	dLdb[0]
 //				...
+//			8byte double	dLdb[sizeb-1]
+//			8byte double	vecdW[0]
+//				...
+//			8byte double	vecdW[sizeW-1]
+//			8byte double	vecdb[0]
+//				...
+//			8byte double	vecdb[sizeb-1]
 void CTraining::FileSave()
 {
 	int i, j;
@@ -549,15 +573,16 @@ void CTraining::FileSave()
 	int ver[2];
 	magic[0] = 'P';
 	magic[1] = 'D';
-	ver[0] = 1;
-	ver[1] = 9;
+	ver[0] = 2;
+	ver[1] = 1;
 	fwrite(magic, sizeof(char), 2, fpResult);
 	fwrite(ver, sizeof(int), 2, fpResult);
 	fwrite(&alpha, sizeof(int), 1, fpResult);
 	fwrite(D, sizeof(int), alpha+1, fpResult);
-	fwrite(H, sizeof(double), alpha, fpResult);
+	fwrite(&H, sizeof(double), 1, fpResult);
 	fwrite(&DELTA, sizeof(double), 1, fpResult);
 	fwrite(&LAMBDA, sizeof(double), 1, fpResult);
+	fwrite(&MOMENTUMUPDATE, sizeof(double), 1, fpResult);
 	fwrite(&count, sizeof(int), 1, fpResult);
 	fwrite(&learningSize, sizeof(int), 1, fpResult);
 	fwrite(&l, sizeof(int), 1, fpResult);
@@ -567,6 +592,8 @@ void CTraining::FileSave()
 	fwrite(b, sizeof(double), sizeb, fpResult);
 	fwrite(dLdW, sizeof(double), sizeW, fpResult);
 	fwrite(dLdb, sizeof(double), sizeb, fpResult);
+	fwrite(vecdW, sizeof(double), sizeW, fpResult);
+	fwrite(vecdb, sizeof(double), sizeb, fpResult);
 	fclose(fpResult);
 }
 
@@ -614,7 +641,60 @@ int CTraining::WeightSave()
 		}
 		fclose(fp);
 	}
+	name[cursor] = 'b';
+	name[cursor+1] = '.';
+	name[cursor+2] = 't';
+	name[cursor+3] = 'x';
+	name[cursor+4] = 't';
+	name[cursor+5] = 0;
+	fp = fopen(name, "w");
+	for(i=0; i<alpha; i++)
+	{
+		for(j=0; j<D[i+1]; j++)
+			fprintf(fp, "%.6lf\t", b[indexOfb(i,j)]);
+		fprintf(fp, "\n");
+	}
+	fclose(fp);
 	return 0;
+}
+
+// actually this function has an error mathematically
+// so both analytical and numberical gradient would not match forever
+// and I haven't found the right method to check gradient correctly
+double CTraining::GradientCheck()
+{
+	int i;
+	double analytical, numerical, max, diff, ans;;
+	
+	analytical = 0;
+	for(i=0; i<sizeW; i++) analytical += dLdW[i];
+	for(i=0; i<sizeb; i++) analytical += dLdb[i];
+	
+	numerical = 0;
+	for(i=0; i<sizeW; i++) numerical += 1/vecdW[i];
+	for(i=0; i<sizeb; i++) numerical += 1/vecdb[i];
+	numerical *= (L-Lold);
+	
+	printf("\nanalytical : %lf, numerical %lf", analytical, numerical);
+	
+	// choose their absolute value
+	if(analytical<0) analytical *= -1;
+	if(numerical<0) numerical *= -1;
+	
+	if(analytical > numerical)
+	{
+		diff = analytical - numerical;
+		max = analytical;
+	}
+	else
+	{
+		diff = numerical - analytical;
+		max = numerical;
+	}
+	
+	if(max == 0) return 0;
+	ans = diff / max;
+	return ans;
 }
 
 double CTraining::CheckAccuracy()
@@ -698,12 +778,13 @@ int CTraining::SetHyperparam(ValidationParam validateMode, int lPar, double hype
 		LAMBDA = hyperparam;
 		return 0;
 	case LearningrateH:
-		if(lPar<0) return ERR_WRONG_VALID_PARAM;
-		if(lPar>=alpha) return ERR_WRONG_VALID_PARAM;
-		H[lPar] = hyperparam;
+		H = hyperparam;
 		return 0;
 	case LearningSize:
 		learningSize = hyperparam;
+		return 0;
+	case MomentumUpdate:
+		MOMENTUMUPDATE = hyperparam;
 		return 0;
 	default:
 		return ERR_WRONG_VALID_PARAM;
@@ -722,13 +803,63 @@ void CTraining::ShowHelp()
 	printf("enter h whenever you want to read this help message again...");
 }
 
-void CTraining::ConvThreadFunc()
+void CTraining::ConvThreadFunc(int index)
 {
+	int i,j,k,a,b,c;
+	double *X = (double*)malloc(sizeof(double) * sizeConv);
 	
+	for(i=0; i<pData->D0; i++) X[0][i] = pData->x[index][i];
+
+	// for the case if Pooling layer isn't used
+	if(B == 0)
+	{
+		for(m=0; m<A; m++)
+			for(a=0; a<Size.width[m+1]; a++)
+			for(b=0; b<Size.height[m+1]; b++)
+			for(c=0; b<Size.depth[m+1]; c++)
+			{
+				X[indexOfX(m+1,a,b,c)] = convb[indexOfconvb(m,c)];
+				for(i=0; i<F[m]; i++)
+				for(j=0; j<F[m]; j++)
+				for(k=0; k<Size.depth[m]; k++)
+					X[indexOfX(m+1,a,b,c)] += X[indexOfX(m, a*S[m]+i, b*S[m]+j, k)] * convW[indexOfconvW(m,i,j,k)];
+			}
+	}
+	else
+	{
+		for(m=0; m<(A+1)*B; m++)
+		{
+			// Pooling layer
+			if((m+1)%(A+1) == 0)
+			for(a=0; a<Size.width[m+1]; a++)
+			for(b=0; b<Size.height[m+1]; b++)
+			for(c=0; c<Size.depth[m+1]; c++)
+			{
+				
+			}
+			
+			// Conv layer
+			else
+			for(a=0; a<Size.width[m+1]; a++)
+			for(b=0; b<Size.height[m+1]; b++)
+			for(c=0; c<Size.depth[m+1]; c++)
+			{
+				X[indexOfX(m+1,a,b,c)] = 0;
+				for(i=a*S[m]; i<a*S[m]+F[m]; i++)
+				for(j=b*S[m]; j<b*S[m]+F[m]; j++)
+				if(X[indexOfX(m+1,a,b,c)] < X[indexOfX(m,i,j,c)])
+				{
+					X[indexOfX(m+1,a,b,c)] = X[indexOfX(m,i,j,c)];
+				}
+			}
+		}
+	}
 }
 
-void CTraining::TrainingThreadFunc(int index)
+int CTraining::TrainingThreadFunc(int index)
 {
+	if(index >= N) return ERR_WRONGFCTHREADINDEX;
+	
 	int i,j,k,m,tmp;
 	// memory allocation of s, delta, etc
 	// s^(i+1) = W^i * delta^i * s^i + b^i
@@ -835,4 +966,6 @@ void CTraining::TrainingThreadFunc(int index)
 	free(db);
 	free(s);
 	free(delta);
+	
+	return 0;
 }
