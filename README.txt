@@ -3,7 +3,7 @@
 This Project is made of C++.
 And the purpose is to learn how deep learning mechanism works.
 Currently, it is based on MLP, using SVM loss function,
-and optimizes via vanilla gradient descent.
+and optimizes via momentum update.
 It doesn't support cuda yet.
 Next goal is to add convolutional layers
 and cuda supporting.
