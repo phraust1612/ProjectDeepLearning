@@ -41,8 +41,12 @@ CTraining::CTraining(CDataread* pD)
 	cudaGetDeviceProperties(&deviceProp, cudadevice);
 	cuda_err = cudaGetLastError();
 	if(cuda_err != cudaSuccess) CUDAEXIST = 0;
-#endif	
+#endif
+	A = 0;
+	B = 0;
+	C = 0;
 	alpha = 1;
+	beta = 0;
 	learningSize = 0;
 	count = 0;
 	DELTA = DELTADEFAULT;
@@ -52,21 +56,30 @@ CTraining::CTraining(CDataread* pD)
 	Lold = 0;
 	l = 0;
 	L = 0;
-	sizeW = 0;
-	sizeb = 0;
-	sizes = 0;
+	sizeW = NULL;
+	sizeb = NULL;
+	sizes = NULL;
+	sizeConvW = NULL;
+	sizeConvb = NULL;
+	sizeConvX = NULL;
 	automode = 'n';
 	W = NULL;
 	dLdW = NULL;
 	vecdW = NULL;
 	convW = NULL;
+	convdLdW = NULL;
 	b = NULL;
 	dLdb = NULL;
+	vecdb = NULL;
 	convb = NULL;
+	convdLdb = NULL;
 	width = NULL;
 	height = NULL;
 	depth = NULL;
 	D = NULL;
+	F = NULL;
+	S = NULL;
+	P = NULL;
 	savefilename = NULL;
 }
 
@@ -79,14 +92,25 @@ void CTraining::FreeMem()
 	if(dLdW != NULL) free(dLdW);
 	if(vecdW != NULL) free(vecdW);
 	if(convW != NULL) free(convW);
+	if(convdLdW != NULL) free(convdLdW);
 	if(b != NULL) free(b);
 	if(dLdb != NULL) free(dLdb);
 	if(vecdb != NULL) free(vecdb);
 	if(convb != NULL) free(convb);
+	if(convdLdb != NULL) free(convdLdb);
 	if(width != NULL) free(width);
 	if(height != NULL) free(height);
 	if(depth != NULL) free(depth);
+	if(sizeW != NULL) free(sizeW);
+	if(sizeb != NULL) free(sizeb);
+	if(sizes != NULL) free(sizes);
+	if(sizeConvW != NULL) free(sizeConvW);
+	if(sizeConvb != NULL) free(sizeConvb);
+	if(sizeConvX != NULL) free(sizeConvX);
 	if(D != NULL) free(D);
+	if(F != NULL) free(F);
+	if(S != NULL) free(S);
+	if(P != NULL) free(P);
 }
 
 int CTraining::WeightInit(int size, char* argv)
@@ -121,7 +145,7 @@ int CTraining::WeightInit(int size, char* argv)
 	{
 		printf("width_%d : %d, height_%d : %d\n", i, width[i], i, height[i]);
 		// Pooling layer
-		if((B>0) && ((i+1)%(A+1) == 0))
+		if((B>0) && !((i+1)%(A+1)))
 		{
 			while(true)
 			{
@@ -177,7 +201,7 @@ int CTraining::WeightInit(int size, char* argv)
 	}
 	
 	D = (int*) malloc(sizeof(int) * (alpha+1));
-	D[0] = pData->D0;	// initializing D_0 = D, and D_i is dimension of i'th s
+	D[0] = width[beta] * height[beta] * depth[beta];
 	D[alpha] = pData->M;	// initializing D_alpha = M
 	// scan D_i's value from user
 	for(i=1; i<alpha; i++)
@@ -197,16 +221,16 @@ int CTraining::WeightInit(int size, char* argv)
 	// W^i : D_(i+1) x D_i
 	// b^i : D_(i+1)
 	double sumW=0;
-	for(i=0; i<sizeb; i++) b[i] = 0.01;
-	for(i=0; i<sizeW; i++)
+	for(i=0; i<sizeb[alpha]; i++) b[i] = 0.01;
+	for(i=0; i<sizeW[alpha]; i++)
 	{
 		W[i] = (double)rand();
 		sumW += W[i];
 	}
 	// choose random number according to normal distribution
 	// and times sqrt(2/N)
-	for(i=0; i<sizeW; i++)
-		W[i] = (sqrt(2) * (W[i] - U) * (sumW - (double) sizeW * U)) / (V * sqrt(N));
+	for(i=0; i<sizeW[alpha]; i++)
+		W[i] = (sqrt(2) * (W[i] - U) * (sumW - (double) sizeW[alpha] * U)) / (V * sqrt(N));
 				
 	return 0;
 }
@@ -251,18 +275,30 @@ int CTraining::WeightLoad(char* argv)
 	fread(&l, sizeof(int), 1, fpWeight);
 	fread(&L, sizeof(double), 1, fpWeight);
 	fread(&Lold, sizeof(double), 1, fpWeight);
+	A = 0;
+	B = 0;
+	C = alpha-1;
+	beta = 0;
+	
+	width = (int*) malloc(sizeof(int) * (beta+1));
+	height = (int*) malloc(sizeof(int) * (beta+1));
+	depth = (int*) malloc(sizeof(int) * (beta+1));
+
+	width[0] = pData->row;
+	height[0] = pData->col;
+	depth[0] = pData->depth;
 	
 	// allocate memories
 	ParamAllocate();
 	
 	// scan W,b etc
-	fread(W, sizeof(double), sizeW, fpWeight);
-	fread(b, sizeof(double), sizeb, fpWeight);
+	fread(W, sizeof(double), sizeW[alpha], fpWeight);
+	fread(b, sizeof(double), sizeb[alpha], fpWeight);
 	// scan gradients
-	fread(dLdW, sizeof(double), sizeW, fpWeight);
-	fread(dLdb, sizeof(double), sizeb, fpWeight);
-	fread(vecdW, sizeof(double), sizeW, fpWeight);
-	fread(vecdb, sizeof(double), sizeb, fpWeight);
+	fread(dLdW, sizeof(double), sizeW[alpha], fpWeight);
+	fread(dLdb, sizeof(double), sizeb[alpha], fpWeight);
+	fread(vecdW, sizeof(double), sizeW[alpha], fpWeight);
+	fread(vecdb, sizeof(double), sizeb[alpha], fpWeight);
 	fclose(fpWeight);
 	loaded=1;
 	
@@ -278,11 +314,10 @@ int CTraining::indexOfW(int i, int j, int k)
 	if(k>=D[i]) return ERR_WRONGINDEXW;
 	
 	int t, ans;
-	ans = 0;
-	for(t=0; t<i; t++) ans += D[t+1] * D[t];
+	ans = sizeW[i];
 	ans += D[i] * j;
 	ans += k;
-	if(ans>=sizeW) return ERR_WRONGINDEXW;
+	if(ans>=sizeW[alpha]) return ERR_WRONGINDEXW;
 	
 	return ans;
 }
@@ -295,10 +330,9 @@ int CTraining::indexOfb(int i, int j)
 	if(j>=D[i+1]) return ERR_WRONGINDEXB;
 	
 	int t, ans;
-	ans = 0;
-	for(t=0; t<i; t++) ans += D[t+1];
+	ans = sizeb[i];
 	ans += j;
-	if(ans>=sizeb) return ERR_WRONGINDEXB;
+	if(ans>=sizeb[alpha]) return ERR_WRONGINDEXB;
 	
 	return ans;
 }
@@ -311,10 +345,9 @@ int CTraining::indexOfs(int i, int j)
 	if(j>=D[i]) return ERR_WRONGINDEXS;
 	
 	int t, ans;
-	ans = 0;
-	for(t=0; t<i; t++) ans += D[t];
+	ans = sizes[i];
 	ans += j;
-	if(ans>=sizes) return ERR_WRONGINDEXS;
+	if(ans>=sizes[alpha+1]) return ERR_WRONGINDEXS;
 	
 	return ans;
 }
@@ -326,11 +359,11 @@ int CTraining::indexOfdW(int m, int i, int j, int k)
 	if(i>=D[alpha]) return ERR_WRONGINDEXDW;
 	
 	int t, ans;
-	ans = i * sizeW;
+	ans = i * sizeW[alpha];
 	t = indexOfW(m,j,k);
 	if(t<0) return t;
 	ans += t;
-	if(ans>=D[alpha] * sizeW) return ERR_WRONGINDEXDW;
+	if(ans>=D[alpha] * sizeW[alpha]) return ERR_WRONGINDEXDW;
 	
 	return ans;
 }
@@ -342,74 +375,115 @@ int CTraining::indexOfdb(int m, int i, int j)
 	if(i>=D[alpha]) return ERR_WRONGINDEXDB;
 	
 	int t, ans;
-	ans = i * sizeb;
+	ans = i * sizeb[alpha];
 	t = indexOfb(m,j);
 	if(t<0) return t;
 	
 	ans += t;
-	if(ans>=D[alpha] * sizeb) return ERR_WRONGINDEXDB;
+	if(ans>=D[alpha] * sizeb[alpha]) return ERR_WRONGINDEXDB;
 	
 	return ans;
 }
 
-int CTraining::indexOfX(int m, int i, int j, int k)
+// return sizeConvX[u] + width[u]*height[u]*k + width[u]*j + i;
+// which doesn't consider about zero-padding yet.
+int CTraining::indexOfConvX(int u, int i, int j, int k)
 {
-	// TODO
-	return 0;
-}
-
-int CTraining::indexOfconvW(int m, int i, int j, int k)
-{
-	// TODO
-	return 0;
-}
-
-int CTraining::indexOfconvb(int m, int c)
-{
-	// TODO
-	return 0;
-}
-
-double CTraining::XValueOfIndex(double *pt, int m, int i, int j, int k)
-{
-	// TODO
+	int ans = height[u]*k + j;
+	ans *= width[u];
+	ans += i + sizeConvX[u];
 	
-	return 0;
+	return ans;
+}
+
+// return sizeConvW[u] + F[u]*F[u]*depth[u]*v + F[u]*F[u]*k + F[u]*j + i
+int CTraining::indexOfconvW(int u, int v, int i, int j, int k)
+{
+	int ans = depth[u] * v + k;
+	ans *= F[u];
+	ans += j;
+	ans *= F[u];
+	ans += i + sizeConvW[u];
+	return ans;
+}
+
+int CTraining::indexOfconvb(int u, int v)
+{
+	return sizeConvb[u] + v;
+}
+
+// return 0 if it is on zero-padding
+// or find the right X value
+double CTraining::XValueOfIndex(double *pt, int u, int i, int j, int k)
+{
+	if(i<P[u]) return 0;
+	if(j<P[u]) return 0;
+	if(i>=width[u]+P[u]) return 0;
+	if(j>=height[u]+P[u]) return 0;
+	
+	int ind = indexOfConvX(u, i-P[u], j-P[u], k);
+	return pt[ind];
 }
 
 void CTraining::ParamAllocate()
 {
 	int i,j,k;
 	
-	sizeW = 0;
-	sizeb = 0;
-	for(i=0; i<alpha; i++) sizeW += D[i+1] * D[i];
-	for(i=0; i<alpha; i++) sizeb += D[i+1];
-	sizes = sizeb + D[0];
+	sizeW = (int*) malloc(sizeof(int) * (alpha+1));
+	sizeb = (int*) malloc(sizeof(int) * (alpha+1));
+	sizes = (int*) malloc(sizeof(int) * (alpha+2));
+	sizeConvX = (int*) malloc(sizeof(int) * (beta+2));
+	sizeConvW = (int*) malloc(sizeof(int) * (beta+1));
+	sizeConvb = (int*) malloc(sizeof(int) * (beta+1));
 	
-	sizeConv = 0;
-	sizeConvW = 0;
-	sizeConvb = 0;
-	for(i=0; i<=beta; i++) sizeConv += width[i] * height[i] * depth[i];
-	for(i=0; i<beta; i++) sizeConvW += F[i];
-	for(i=0; i<beta; i++) sizeConvb += depth[i+1];
+	sizeW[0] = 0;
+	sizeb[0] = 0;
+	sizes[0] = 0;
+	for(i=0; i<alpha; i++)
+	{
+		sizeW[i+1] = sizeW[i] + D[i+1]*D[i];
+		sizeb[i+1] = sizeb[i] + D[i+1];
+		sizes[i+1] = sizes[i] + D[i];
+	}
+	sizes[alpha+1] = sizes[alpha] + D[alpha];
+	
+	sizeConvX[0] = 0;
+	sizeConvW[0] = 0;
+	sizeConvb[0] = 0;
+	for(i=0; i<beta; i++)
+	{
+		sizeConvX[i+1] = sizeConvX[i] + width[i] * height[i] * depth[i];
+		sizeConvW[i+1] = sizeConvW[i];
+		sizeConvb[i+1] = sizeConvb[i];
+		// conv layer
+		if(!B || ((i+1)%(A+1) > 0))
+		{
+			sizeConvW[i+1] += F[i]*F[i]*depth[i]*depth[i+1];
+			sizeConvb[i+1] += depth[i+1];
+		}
+	}
+	sizeConvX[beta+1] = sizeConvX[beta] + width[beta]*height[beta]*depth[beta];
 	
 	// dLdW[indexOfW(i,j,k)] : dL / dW^i_j,k
 	// dLdb[indexOfb(i,j)] : dL / db^i_j
-	W = (double*) malloc(sizeof(double) * sizeW);
-	b = (double*) malloc(sizeof(double) * sizeb);
-	dLdW = (double*) malloc(sizeof(double) * sizeW);
-	dLdb = (double*) malloc(sizeof(double) * sizeb);
-	vecdW = (double*) malloc(sizeof(double) * sizeW);
-	vecdb = (double*) malloc(sizeof(double) * sizeb);
+	W = (double*) malloc(sizeof(double) * sizeW[alpha]);
+	b = (double*) malloc(sizeof(double) * sizeb[alpha]);
+	dLdW = (double*) malloc(sizeof(double) * sizeW[alpha]);
+	dLdb = (double*) malloc(sizeof(double) * sizeb[alpha]);
+	vecdW = (double*) malloc(sizeof(double) * sizeW[alpha]);
+	vecdb = (double*) malloc(sizeof(double) * sizeb[alpha]);
+	convW = (double*) malloc(sizeof(double) * sizeConvW[beta]);
+	convb = (double*) malloc(sizeof(double) * sizeConvb[beta]);
+	convdLdW = (double*) malloc(sizeof(double) * sizeConvW[beta]);
+	convdLdb = (double*) malloc(sizeof(double) * sizeConvb[beta]);
 	
 	// initialize dL/db and dL/dW
-	for(i=0; i<sizeb; i++)
+	for(i=0; i<sizeb[alpha]; i++)
 	{
 		dLdb[i] = 0;
 		vecdb[i]=0;
 	}
-	for(i=0; i<sizeW; i++)
+	for(i=0; i<sizeW[alpha]; i++)
 	{
 		dLdW[i] = 0;
 		vecdW[i]=0;
@@ -435,16 +509,16 @@ void CTraining::Training(int threads)
 #if CUDAEXIST
 	// allocate device memories
 	double *d_W, *d_b, *d_dLdW, *d_dLdb;
-	cudaMalloc((void**)&d_W, sizeof(double) * sizeW);
-	cudaMalloc((void**)&d_b, sizeof(double) * sizeb);
-	cudaMalloc((void**)&d_dLdW, sizeof(double) * sizeW);
-	cudaMalloc((void**)&d_dLdb, sizeof(double) * sizeb);
+	cudaMalloc((void**)&d_W, sizeof(double) * sizeW[alpha]);
+	cudaMalloc((void**)&d_b, sizeof(double) * sizeb[alpha]);
+	cudaMalloc((void**)&d_dLdW, sizeof(double) * sizeW[alpha]);
+	cudaMalloc((void**)&d_dLdb, sizeof(double) * sizeb[alpha]);
 	
 	// memcpy initial W,b from host to device
-	cudaMemcpy(d_W, W, sizeof(double) * sizeW, cudaMemcpyHostToDevice);
-	cudaMemcpy(d_b, b, sizeof(double) * sizeb, cudaMemcpyHostToDevice);
-	cudaMemcpy(d_dLdW, dLdW, sizeof(double) * sizeW, cudaMemcpyHostToDevice);
-	cudaMemcpy(d_dLdb, dLdb, sizeof(double) * sizeb, cudaMemcpyHostToDevice);
+	cudaMemcpy(d_W, W, sizeof(double) * sizeW[alpha], cudaMemcpyHostToDevice);
+	cudaMemcpy(d_b, b, sizeof(double) * sizeb[alpha], cudaMemcpyHostToDevice);
+	cudaMemcpy(d_dLdW, dLdW, sizeof(double) * sizeW[alpha], cudaMemcpyHostToDevice);
+	cudaMemcpy(d_dLdb, dLdb, sizeof(double) * sizeb[alpha], cudaMemcpyHostToDevice);
 #endif
 	
 	for(;count<learningSize && cont; count++) 
@@ -455,12 +529,12 @@ void CTraining::Training(int threads)
 			l = 0;
 #if CUDAEXIST
 			// initialize gradient of Loss on device
-			CudaResetGradients<<<sizeW, 1>>>(d_dLdW);
-			CudaResetGradients<<<sizeb, 1>>>(d_dLdb);
+			CudaResetGradients<<<sizeW[alpha], 1>>>(d_dLdW);
+			CudaResetGradients<<<sizeb[alpha], 1>>>(d_dLdb);
 #else
-			for(i=0; i<sizeW; i++)
+			for(i=0; i<sizeW[alpha]; i++)
 				dLdW[i] = 0;
-			for(i=0; i<sizeb; i++)
+			for(i=0; i<sizeb[alpha]; i++)
 				dLdb[i] = 0;
 #endif
 		}
@@ -559,7 +633,7 @@ void CTraining::Training(int threads)
 			// run multi-thread via cpu
 			if(cont)
 			{
-				for(i=0; i<threads && l+i<N; i++) hThread[i] = std::thread(&CTraining::FCThreadFunc, this, pData->x[l+i], l+i);
+				for(i=0; i<threads && l+i<N; i++) hThread[i] = std::thread(&CTraining::FCThreadFunc, this, l+i);
 				for(i=0; i<threads && l+i<N; i++) hThread[i].join();
 				l += threads;
 			}
@@ -570,18 +644,18 @@ void CTraining::Training(int threads)
 		{	
 #if CUDAEXIST
 			// compute L2 regularization on device
-			CudaL2Regularization<<<sizeW, 1>>>(d_dLdW, d_W, (double)N, LAMBDA);
-			CudaL2Regularization<<<sizeb, 1>>>(d_dLdb, d_b, (double)N, 0);
+			CudaL2Regularization<<<sizeW[alpha], 1>>>(d_dLdW, d_W, (double)N, LAMBDA);
+			CudaL2Regularization<<<sizeb[alpha], 1>>>(d_dLdb, d_b, (double)N, 0);
 			
 			// and optimize it
-			CudaOptimization<<<sizeW, 1>>>(d_dLdW, d_W, H);
-			CudaOptimization<<<sizeb, 1>>>(d_dLdb, d_b, H);
+			CudaOptimization<<<sizeW[alpha], 1>>>(d_dLdW, d_W, H);
+			CudaOptimization<<<sizeb[alpha], 1>>>(d_dLdb, d_b, H);
 #else
 			// L2 regularization
 			// and optimize next W, b according to momentum update
 			// if you set MOMENTUMUPDATE as 0, it works exactly same as SGD
 			L /= (double) N;
-			for(i=0; i<sizeW; i++)
+			for(i=0; i<sizeW[alpha]; i++)
 			{
 				dLdW[i] /= (double) N;
 				dLdW[i] += LAMBDA * W[i];
@@ -589,7 +663,7 @@ void CTraining::Training(int threads)
 				vecdW[i] = MOMENTUMUPDATE * vecdW[i] - H * dLdW[i];
 				W[i] += vecdW[i];
 			}
-			for(i=0; i<sizeb; i++)
+			for(i=0; i<sizeb[alpha]; i++)
 			{
 				dLdb[i] /= (double) N;
 				vecdb[i] = MOMENTUMUPDATE * vecdb[i] - H * dLdb[i];
@@ -612,6 +686,7 @@ void CTraining::Training(int threads)
 			}
 			if(automode == 'm')
 			{
+				Key.Stop();
 				printf("\nto modify DELTA, input 1\n");
 				printf("to modify LAMBDA, input 2\n");
 				printf("to modify H, input 3\n");
@@ -627,6 +702,9 @@ void CTraining::Training(int threads)
 					getchar();
 					SetHyperparam(valid, 0, Try);
 				}
+				Key.Start();
+				Key.keysave = 'n';
+				automode = 'n';
 			}
 			Lold = L;
 			L=0;
@@ -637,10 +715,10 @@ void CTraining::Training(int threads)
 	Key.Stop();
 #if CUDAEXIST
 	// copy from device to host
-	cudaMemcpy(d_W, W, sizeof(double) * sizeW, cudaMemcpyDeviceToHost);
-	cudaMemcpy(d_b, b, sizeof(double) * sizeb, cudaMemcpyDeviceToHost);
-	cudaMemcpy(d_dLdW, dLdW, sizeof(double) * sizeW, cudaMemcpyDeviceToHost);
-	cudaMemcpy(d_dLdb, dLdb, sizeof(double) * sizeb, cudaMemcpyDeviceToHost);
+	cudaMemcpy(d_W, W, sizeof(double) * sizeW[alpha], cudaMemcpyDeviceToHost);
+	cudaMemcpy(d_b, b, sizeof(double) * sizeb[alpha], cudaMemcpyDeviceToHost);
+	cudaMemcpy(d_dLdW, dLdW, sizeof(double) * sizeW[alpha], cudaMemcpyDeviceToHost);
+	cudaMemcpy(d_dLdb, dLdb, sizeof(double) * sizeb[alpha], cudaMemcpyDeviceToHost);
 	
 	// free cuda memories
 	cudaFree(d_W);
@@ -671,22 +749,22 @@ void CTraining::Training(int threads)
 //			8byte double	Lold
 //			8byte double	W[0]
 //				...
-//			8byte double	W[sizeW-1]
+//			8byte double	W[sizeW[alpha]-1]
 //			8byte double	b[0]
 //				...
-//			8byte double	b[sizeb-1]
+//			8byte double	b[sizeb[alpha]-1]
 //			8byte double	dLdW[0]
 //				...
-//			8byte double	dLdW[sizeW-1]
+//			8byte double	dLdW[sizeW[alpha]-1]
 //			8byte double	dLdb[0]
 //				...
-//			8byte double	dLdb[sizeb-1]
+//			8byte double	dLdb[sizeb[alpha]-1]
 //			8byte double	vecdW[0]
 //				...
-//			8byte double	vecdW[sizeW-1]
+//			8byte double	vecdW[sizeW[alpha]-1]
 //			8byte double	vecdb[0]
 //				...
-//			8byte double	vecdb[sizeb-1]
+//			8byte double	vecdb[sizeb[alpha]-1]
 void CTraining::FileSave()
 {
 	int i, j;
@@ -711,12 +789,12 @@ void CTraining::FileSave()
 	fwrite(&l, sizeof(int), 1, fpResult);
 	fwrite(&L, sizeof(double), 1, fpResult);
 	fwrite(&Lold, sizeof(double), 1, fpResult);
-	fwrite(W, sizeof(double), sizeW, fpResult);
-	fwrite(b, sizeof(double), sizeb, fpResult);
-	fwrite(dLdW, sizeof(double), sizeW, fpResult);
-	fwrite(dLdb, sizeof(double), sizeb, fpResult);
-	fwrite(vecdW, sizeof(double), sizeW, fpResult);
-	fwrite(vecdb, sizeof(double), sizeb, fpResult);
+	fwrite(W, sizeof(double), sizeW[alpha], fpResult);
+	fwrite(b, sizeof(double), sizeb[alpha], fpResult);
+	fwrite(dLdW, sizeof(double), sizeW[alpha], fpResult);
+	fwrite(dLdb, sizeof(double), sizeb[alpha], fpResult);
+	fwrite(vecdW, sizeof(double), sizeW[alpha], fpResult);
+	fwrite(vecdb, sizeof(double), sizeb[alpha], fpResult);
 	fclose(fpResult);
 }
 
@@ -790,12 +868,12 @@ double CTraining::GradientCheck()
 	double analytical, numerical, max, diff, ans;;
 	
 	analytical = 0;
-	for(i=0; i<sizeW; i++) analytical += dLdW[i];
-	for(i=0; i<sizeb; i++) analytical += dLdb[i];
+	for(i=0; i<sizeW[alpha]; i++) analytical += dLdW[i];
+	for(i=0; i<sizeb[alpha]; i++) analytical += dLdb[i];
 	
 	numerical = 0;
-	for(i=0; i<sizeW; i++) numerical += 1/vecdW[i];
-	for(i=0; i<sizeb; i++) numerical += 1/vecdb[i];
+	for(i=0; i<sizeW[alpha]; i++) numerical += 1/vecdW[i];
+	for(i=0; i<sizeb[alpha]; i++) numerical += 1/vecdb[i];
 	numerical *= (L-Lold);
 	
 	printf("\nanalytical : %lf, numerical %lf", analytical, numerical);
@@ -823,9 +901,7 @@ double CTraining::GradientCheck()
 double CTraining::CheckAccuracy()
 {
 	int i, j, k, m;
-	// memory allocation for s and delta
-	double* s = (double*) malloc(sizeof(double) * sizes);
-	bool* delta = (bool*) malloc(sizeof(bool) * sizes);
+	double* s = (double*) malloc(sizeof(double) * sizes[alpha+1]);
 	
 	int count = 0;	// number of how many images were correct
 	int ans;			// temporary answer
@@ -837,27 +913,27 @@ double CTraining::CheckAccuracy()
 		j=0;
 		// initializaing...
 		for(i=0; i<D[0]; i++)
-		{
 			s[indexOfs(0,i)] = pData->xt[m][i];	// initializing s_0 = x_l
-			delta[indexOfs(0,i)] = 1;	// initializing deltat^0_i,i = 1,
-		}						// actually deltat is DxD matrix but I'll save memory
 		
 		// this loop is a procedure of score function
-		for(i=1; i<=alpha; i++)
+		for(i=0; i<alpha; i++)
 		{
-			for(j=0; j<D[i]; j++)
+			for(j=0; j<D[i+1]; j++)
 			{
-				s[indexOfs(i,j)] = 0;
+				s[indexOfs(i+1,j)] = b[indexOfb(i,j)];
 				// st^i = W^(i-1) * deltat^(i-1) * st^(i-1) + b^(i-1)
-				for(k=0; k<D[i-1]; k++)
-					if(delta[indexOfs(i-1,k)])
-						s[indexOfs(i,j)] += W[indexOfW(i-1,j,k)] * s[indexOfs(i-1,k)];
-				s[indexOfs(i,j)] += b[indexOfb(i-1,j)];
-				//deltat^i_j = 1 if st^i_j>0, 0 otherwise
-				if(i==alpha) continue;	// because there is no deltat[alpha] memory allocated
-				if(s[indexOfs(i,j)] > 0) delta[indexOfs(i,j)] = 1;
-				else delta[indexOfs(i,j)] = 0;
+				for(k=0; k<D[i]; k++)
+					s[indexOfs(i+1,j)] += W[indexOfW(i,j,k)] * s[indexOfs(i,k)];
+				if(s[indexOfs(i+1,j)] < 0) s[indexOfs(i+1,j)] = 0;
 			}
+		}
+		
+		// final FC layer without RELU
+		for(j=0; j<D[alpha]; j++)
+		{
+			s[indexOfs(alpha,j)] = b[indexOfb(C,j)];
+			for(k=0; k<D[C]; k++)
+				s[indexOfs(alpha,j)] += W[indexOfW(C,j,k)] * s[indexOfs(C,k)];
 		}
 		
 		// compare with answer and calculate the accuracy
@@ -883,7 +959,6 @@ double CTraining::CheckAccuracy()
 	printf("done...");
 	
 	free(s);
-	free(delta);
 	highest = (double) (100*count)/Nt;
 	return highest;
 }
@@ -928,90 +1003,94 @@ void CTraining::ShowHelp()
 
 void CTraining::ConvThreadFunc(int index)
 {
-	int m,i,j,k,a,b,c;
-	double *X = (double*)malloc(sizeof(double) * sizeConv);
-	double *convReLU = (double*) malloc(sizeof(double) * sizeConv);
+	int m,i,j,k,i2,j2,k2,tmp;
+	double *ConvX = (double*)malloc(sizeof(double) * sizeConvX[beta+1]);
+	bool *convReLU = (bool*)malloc(sizeof(bool) * sizeConvX[beta+1]);
+	//int *Pooledi = (int*) malloc(sizeof(int) * sizeConvX[beta+1]);
+//	int *Pooledj = (int*) malloc(sizeof(int) * sizeConvX[beta+1]);
 	
 	// initialize
-	for(i=0; i<pData->D0; i++) X[i] = pData->x[index][i];
-
+	for(i=0; i<pData->D0; i++) ConvX[i] = pData->x[index][i];
+	
+	// Conv and Pooling layer procedure
 	for(m=0; m<beta; m++)
 	{
 		// Pooling layer
-		if((B>0) && ((i+1)%(A+1) == 0))
-		for(a=0; a<width[m+1]; a++)
-		for(b=0; b<height[m+1]; b++)
-		for(c=0; c<depth[m+1]; c++)
+		if((B>0) && !((i+1)%(A+1)))
+		for(i2=0; i2<width[m+1]; i2++)
+		for(j2=0; j2<height[m+1]; j2++)
+		for(k2=0; k2<depth[m+1]; k2++)
 		{
-			X[indexOfX(m+1,a,b,c)] = 0;
-			for(i=a*S[m]; i<a*S[m]+F[m]; i++)
-			for(j=b*S[m]; j<b*S[m]+F[m]; j++)
-			if(X[indexOfX(m+1,a,b,c)] < X[indexOfX(m,i,j,c)])
+			ConvX[indexOfConvX(m+1,i2,j2,k2)] = 0;
+			for(i=i2*S[m]; i<i2*S[m]+F[m]; i++)
+			for(j=j2*S[m]; j<j2*S[m]+F[m]; j++)
+			if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < ConvX[indexOfConvX(m,i,j,k2)])
 			{
-				X[indexOfX(m+1,a,b,c)] = X[indexOfX(m,i,j,c)];
+				ConvX[indexOfConvX(m+1,i2,j2,k2)] = ConvX[indexOfConvX(m,i,j,k2)];
+				//Pooledi[indexofConvX(m+1,i2,j2,k2)] = i;
+				//Pooledj[indexofConvX(m+1,i2,j2,k2)] = j;
 			}
 		}
 		
 		// Conv layer
 		else
-		for(a=0; a<width[m+1]; a++)
-		for(b=0; b<height[m+1]; b++)
-		for(c=0; c<depth[m+1]; c++)
+		for(i2=0; i2<width[m+1]; i2++)
+		for(j2=0; j2<height[m+1]; j2++)
+		for(k2=0; k2<depth[m+1]; k2++)
 		{
-			X[indexOfX(m+1,a,b,c)] = convb[indexOfconvb(m,c)];
+			ConvX[indexOfConvX(m+1,i2,j2,k2)] = convb[indexOfconvb(m,k2)];
 			for(i=0; i<F[m]; i++)
 			for(j=0; j<F[m]; j++)
 			for(k=0; k<depth[m]; k++)
 			{
-				X[indexOfX(m+1,a,b,c)] += X[indexOfX(m, a*S[m]+i, b*S[m]+j, k)] * convW[indexOfconvW(m,i,j,k)];
-				if(X[indexOfX(m+1,a,b,c)] > 0) convReLU[indexOfX(m+1,a,b,c)] = 1;
-				else
-				{
-					X[indexOfX(m+1,a,b,c)] = 0;
-					convReLU[indexOfX(m+1,a,b,c)] = 0;
-				}
+				ConvX[indexOfConvX(m+1,i2,j2,k2)] += XValueOfIndex(ConvX, m, i2*S[m]+i, j2*S[m]+j, k) * convW[indexOfconvW(m,k2,i,j,k)];
+				if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < 0) convReLU[indexOfConvX(m+1,i2,j2,k2)] = 0;
 			}
 		}
 	}
-}
-
-int CTraining::FCThreadFunc(double *xpt, int index)
-{
-	int i,j,k,m,tmp;
-	// memory allocation of s, delta, etc
-	// s^(i+1) = W^i * delta^i * s^i + b^i
-	double* s = (double*) malloc(sizeof(double) * sizes);
+	// Conv & Pool layer ended
+	
+	// X^(i+1) = W^i * delta^i * X^i + b^i
+	double* X = (double*) malloc(sizeof(double) * sizes[alpha+1]);
 	// dW[indexOfW(m,i,j,k)] : ds^alpha_i / dW^m_j,k
-	double* dW = (double*) malloc(sizeof(double) * D[alpha] * sizeW);
+	double* dW = (double*) malloc(sizeof(double) * D[alpha] * sizeW[alpha]);
 	// db[sizeOfb(m,i,j)] : ds^alpha_i / db^m_j
 	// and this is exactly same as ds^alpha_i / ds^(m+1)_j mathematically
-	double* db = (double*) malloc(sizeof(double) * D[alpha] * sizeb);
-	// this delta is a deltachronical matrix, used at ReLU
-	bool* delta = (bool*) malloc(sizeof(bool) * sizes);
+	double* db = (double*) malloc(sizeof(double) * D[alpha] * sizeb[alpha]);
+	bool* ReLU = (bool*) malloc(sizeof(bool) * sizes[alpha+1]);
 	
-	// initialize score function and delta chronicle
+	// initialize score function and ReLU chronicle
 	for(j=0; j<D[0]; j++)
 	{
-		s[indexOfs(0,j)] = xpt[j];	// initializing sBef = x_l
-		delta[indexOfs(0,j)] = 1;	// initializing first deltaBef
+		X[indexOfs(0,j)] = pData->x[index][j];	// initializing sBef = x_l
+		ReLU[indexOfs(0,j)] = 1;	// initializing first deltaBef
 	}
 	
 	// this loop is a procedure of score function
-	for(i=0; i<alpha; i++)
+	for(i=0; i<C; i++)
 	{
 		for(j=0; j<D[i+1]; j++)
 		{
-			s[indexOfs(i+1, j)] = 0;
-			// s^(i+1) = W^i * delta^i * s^i + b^i
+			X[indexOfs(i+1,j)] = b[indexOfb(i,j)];
+			// X^(i+1) = W^i * ReLU^i * X^i + b^i
 			for(k=0; k<D[i]; k++)
-				if(delta[indexOfs(i,k)])
-					s[indexOfs(i+1,j)] += W[indexOfW(i,j,k)] * s[indexOfs(i,k)];
-			s[indexOfs(i+1,j)] += b[indexOfb(i,j)];
-			//delta^i_j = 1 if s^i_j>0, 0 otherwise
-//			if(i>=alpha-1) continue;	// because there is no delta[alpha] memory allocated
-			if(s[indexOfs(i+1,j)] > 0) delta[indexOfs(i+1,j)] = 1;
-			else delta[indexOfs(i+1,j)] = 0;
+				if(ReLU[indexOfs(i,k)])
+					X[indexOfs(i+1,j)] += W[indexOfW(i,j,k)] * X[indexOfs(i,k)];
+			//ReLU^i_j = 1 if X^i_j>0, 0 otherwise
+			if(X[indexOfs(i+1,j)] > 0) ReLU[indexOfs(i+1,j)] = 1;
+			else ReLU[indexOfs(i+1,j)] = 0;
 		}
+	}
+	
+	for(j=0; j<D[alpha]; j++)
+	{
+		X[indexOfs(alpha,j)] = b[indexOfb(C,j)];
+		// X^(i+1) = W^i * ReLU^i * X^i + b^i
+		for(k=0; k<D[C]; k++)
+			if(ReLU[indexOfs(C,k)])
+				X[indexOfs(alpha,j)] += W[indexOfW(C,j,k)] * X[indexOfs(C,k)];
+		//ReLU^i_j = 1 if X^i_j>0, 0 otherwise
+		ReLU[indexOfs(alpha,j)] = 1;
 	}
 	
 	// initialize db and dW (for the case m=alpha-1)
@@ -1025,11 +1104,7 @@ int CTraining::FCThreadFunc(double *xpt, int index)
 			else db[indexOfdb(alpha-1,i,j)] = 0;
 			
 			for(k=0; k<D[alpha-1]; k++)
-			{
-				if(delta[indexOfs(alpha-1,k)])
-					dW[indexOfdW(alpha-1,i,j,k)] = db[indexOfdb(alpha-1,i,j)] * s[indexOfs(alpha-1,k)];
-				else dW[indexOfdW(alpha-1,i,j,k)] = 0;
-			}
+				dW[indexOfdW(alpha-1,i,j,k)] = db[indexOfdb(alpha-1,i,j)] * X[indexOfs(alpha-1,k)];
 		}
 	}
 	
@@ -1043,14 +1118,14 @@ int CTraining::FCThreadFunc(double *xpt, int index)
 				// compute ds^alpha_i / db^m_j
 				// check up my blog for detail about how this comes
 				db[indexOfdb(m,i,j)] = 0;
-				if(delta[indexOfs(m+1,j)])
+				if(ReLU[indexOfs(m+1,j)])
 					for(k=0; k<D[m+2]; k++)
 						db[indexOfdb(m,i,j)] += db[indexOfdb(m+1,i,k)] * W[indexOfW(m+1,k,j)];
 						
 				// compute ds^alpha_i / dW^m_j,k
 				for(k=0; k<D[m]; k++)
 				{
-					if(delta[indexOfs(m,k)]) dW[indexOfdW(m,i,j,k)] = db[indexOfdb(m,i,j)] * s[indexOfs(m,k)];
+					if(ReLU[indexOfs(m,k)]) dW[indexOfdW(m,i,j,k)] = db[indexOfdb(m,i,j)] * X[indexOfs(m,k)];
 					else dW[indexOfdW(m,i,j,k)] = 0;
 				}
 			}
@@ -1063,7 +1138,7 @@ int CTraining::FCThreadFunc(double *xpt, int index)
 	for(i=0; i<D[alpha]; i++)
 	{
 		if(i == pData->y[index]) continue;
-		if((tmp = s[indexOfs(alpha,i)] - s[indexOfs(alpha,pData->y[index])] + DELTA) > 0)
+		if((tmp = X[indexOfs(alpha,i)] - X[indexOfs(alpha,pData->y[index])] + DELTA) > 0)
 		{
 			L += tmp;
 			for(m=0; m<alpha; m++)
@@ -1071,8 +1146,8 @@ int CTraining::FCThreadFunc(double *xpt, int index)
 				for(j=0; j<D[m+1]; j++)
 				{
 					for(k=0; k<D[m]; k++)
-						dLdW[indexOfW(m,j,k)] += dW[indexOfdW(m,i,j,k)] - dW[indexOfdW(m,index,j,k)];
-					dLdb[indexOfb(m,j)] += db[indexOfdb(m,i,j)] - db[indexOfdb(m,index,j)];
+						dLdW[indexOfW(m,j,k)] += dW[indexOfdW(m,i,j,k)] - dW[indexOfdW(m,pData->y[index],j,k)];
+					dLdb[indexOfb(m,j)] += db[indexOfdb(m,i,j)] - db[indexOfdb(m,pData->y[index],j)];
 				}
 			}
 		}
@@ -1081,8 +1156,123 @@ int CTraining::FCThreadFunc(double *xpt, int index)
 	// free memories used at this thread
 	free(dW);
 	free(db);
-	free(s);
-	free(delta);
+	free(X);
+	free(ReLU);
+	free(ConvX);
+	free(convReLU);
+}
+
+int CTraining::FCThreadFunc(int index)
+{
+	int i,j,k,m,tmp;
+	// X^(i+1) = W^i * delta^i * X^i + b^i
+	double* X = (double*) malloc(sizeof(double) * sizes[alpha+1]);
+	// dW[indexOfW(m,i,j,k)] : ds^alpha_i / dW^m_j,k
+	double* dW = (double*) malloc(sizeof(double) * D[alpha] * sizeW[alpha]);
+	// db[sizeOfb(m,i,j)] : ds^alpha_i / db^m_j
+	// and this is exactly same as ds^alpha_i / ds^(m+1)_j mathematically
+	double* db = (double*) malloc(sizeof(double) * D[alpha] * sizeb[alpha]);
+	bool* ReLU = (bool*) malloc(sizeof(bool) * sizes[alpha+1]);
+	
+	// initialize score function and ReLU chronicle
+	for(j=0; j<D[0]; j++)
+	{
+		X[indexOfs(0,j)] = pData->x[index][j];	// initializing sBef = x_l
+		ReLU[indexOfs(0,j)] = 1;	// initializing first deltaBef
+	}
+	
+	// this loop is a procedure of score function
+	for(i=0; i<C; i++)
+	{
+		for(j=0; j<D[i+1]; j++)
+		{
+			X[indexOfs(i+1,j)] = b[indexOfb(i,j)];
+			// X^(i+1) = W^i * ReLU^i * X^i + b^i
+			for(k=0; k<D[i]; k++)
+				if(ReLU[indexOfs(i,k)])
+					X[indexOfs(i+1,j)] += W[indexOfW(i,j,k)] * X[indexOfs(i,k)];
+			//ReLU^i_j = 1 if X^i_j>0, 0 otherwise
+			if(X[indexOfs(i+1,j)] > 0) ReLU[indexOfs(i+1,j)] = 1;
+			else ReLU[indexOfs(i+1,j)] = 0;
+		}
+	}
+	
+	for(j=0; j<D[alpha]; j++)
+	{
+		X[indexOfs(alpha,j)] = b[indexOfb(C,j)];
+		// X^(i+1) = W^i * ReLU^i * X^i + b^i
+		for(k=0; k<D[C]; k++)
+			if(ReLU[indexOfs(C,k)])
+				X[indexOfs(alpha,j)] += W[indexOfW(C,j,k)] * X[indexOfs(C,k)];
+		//ReLU^i_j = 1 if X^i_j>0, 0 otherwise
+		ReLU[indexOfs(alpha,j)] = 1;
+	}
+	
+	// initialize db and dW (for the case m=alpha-1)
+	for(i=0; i<D[alpha]; i++)
+	{
+		for(j=0; j<D[alpha]; j++)
+		{
+			// ds^alpha_i / db^(alpha-1)_j = 1 if and only if i=j
+			// otherwise it becomes 0
+			if(i==j) db[indexOfdb(alpha-1,i,j)] = 1;
+			else db[indexOfdb(alpha-1,i,j)] = 0;
+			
+			for(k=0; k<D[alpha-1]; k++)
+				dW[indexOfdW(alpha-1,i,j,k)] = db[indexOfdb(alpha-1,i,j)] * X[indexOfs(alpha-1,k)];
+		}
+	}
+	
+	// calculating gradient for b,W in general
+	for(m=alpha-2; m>=0; m--)
+	{
+		for(i=0; i<D[alpha]; i++)
+		{
+			for(j=0; j<D[m+1]; j++)
+			{
+				// compute ds^alpha_i / db^m_j
+				// check up my blog for detail about how this comes
+				db[indexOfdb(m,i,j)] = 0;
+				if(ReLU[indexOfs(m+1,j)])
+					for(k=0; k<D[m+2]; k++)
+						db[indexOfdb(m,i,j)] += db[indexOfdb(m+1,i,k)] * W[indexOfW(m+1,k,j)];
+						
+				// compute ds^alpha_i / dW^m_j,k
+				for(k=0; k<D[m]; k++)
+				{
+					if(ReLU[indexOfs(m,k)]) dW[indexOfdW(m,i,j,k)] = db[indexOfdb(m,i,j)] * X[indexOfs(m,k)];
+					else dW[indexOfdW(m,i,j,k)] = 0;
+				}
+			}
+		}
+	}
+	
+	// this is a procedure of calculating loss function
+	// according to SVM and its gradient about W,b
+	// L_l = sig_i
+	for(i=0; i<D[alpha]; i++)
+	{
+		if(i == pData->y[index]) continue;
+		if((tmp = X[indexOfs(alpha,i)] - X[indexOfs(alpha,pData->y[index])] + DELTA) > 0)
+		{
+			L += tmp;
+			for(m=0; m<alpha; m++)
+			{
+				for(j=0; j<D[m+1]; j++)
+				{
+					for(k=0; k<D[m]; k++)
+						dLdW[indexOfW(m,j,k)] += dW[indexOfdW(m,i,j,k)] - dW[indexOfdW(m,pData->y[index],j,k)];
+					dLdb[indexOfb(m,j)] += db[indexOfdb(m,i,j)] - db[indexOfdb(m,pData->y[index],j)];
+				}
+			}
+		}
+	}
+	
+	// free memories used at this thread
+	free(dW);
+	free(db);
+	free(X);
+	free(ReLU);
 	
 	return 0;
 }

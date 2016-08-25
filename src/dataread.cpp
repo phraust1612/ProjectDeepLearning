@@ -89,6 +89,7 @@ int CDataread::ReadMNISTTrainingSet(int validateMode)
 	fread(&row, sizeof(int), 1, fpTrainImage);	// read number of rows
 	fread(&col, sizeof(int), 1, fpTrainImage);	// read number of columns
 	M = 10;	// number of possible labels
+	depth = 1;
 	D0 = row * col;	// dimension of each picture
 	if(D0<=0) return ERR_WRONG_DIMENSION;
 	
@@ -189,6 +190,9 @@ int CDataread::ReadCIFAR10TrainingSet(int validateMode)
 	FILE* fpTraining5 = fopen("cifar-10/data_batch_5.bin","rb");
 	
 	M = 10;
+	row = 32;
+	col = 32;
+	depth = 32;
 	D0 = 3072;
 	
 	if(validateMode) N = 40000;
