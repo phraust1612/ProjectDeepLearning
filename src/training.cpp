@@ -412,6 +412,17 @@ int CTraining::indexOfconvb(int u, int v)
 	return sizeConvb[u] + v;
 }
 
+int CTraining::indexOfPool(int m, int i, int j, int k)
+{
+	int ans, t;
+	t = (m+1)/(A+1);
+	ans = height[m]*k + j;
+	ans *= width[m];
+	ans += i + sizePool[t];
+	
+	return ans;
+}
+
 // return 0 if it is on zero-padding
 // or find the right X value
 double CTraining::XValueOfIndex(double *pt, int u, int i, int j, int k)
@@ -435,6 +446,7 @@ void CTraining::ParamAllocate()
 	sizeConvX = (int*) malloc(sizeof(int) * (beta+2));
 	sizeConvW = (int*) malloc(sizeof(int) * (beta+1));
 	sizeConvb = (int*) malloc(sizeof(int) * (beta+1));
+	sizePool = (int*) malloc(sizeof(int) * (B+1));
 	
 	sizeW[0] = 0;
 	sizeb[0] = 0;
@@ -450,6 +462,7 @@ void CTraining::ParamAllocate()
 	sizeConvX[0] = 0;
 	sizeConvW[0] = 0;
 	sizeConvb[0] = 0;
+	sizePool[0] = 0;
 	for(i=0; i<beta; i++)
 	{
 		sizeConvX[i+1] = sizeConvX[i] + width[i] * height[i] * depth[i];
@@ -460,6 +473,11 @@ void CTraining::ParamAllocate()
 		{
 			sizeConvW[i+1] += F[i]*F[i]*depth[i]*depth[i+1];
 			sizeConvb[i+1] += depth[i+1];
+		}
+		else
+		{
+			j = (i+1)/(A+1);
+			sizePool[j] = sizePool[j-1] + sizeConvX[i+1] - sizeConvX[i];
 		}
 	}
 	sizeConvX[beta+1] = sizeConvX[beta] + width[beta]*height[beta]*depth[beta];
@@ -1006,8 +1024,7 @@ void CTraining::ConvThreadFunc(int index)
 	int m,i,j,k,i2,j2,k2,tmp;
 	double *ConvX = (double*)malloc(sizeof(double) * sizeConvX[beta+1]);
 	bool *convReLU = (bool*)malloc(sizeof(bool) * sizeConvX[beta+1]);
-	//int *Pooledi = (int*) malloc(sizeof(int) * sizeConvX[beta+1]);
-//	int *Pooledj = (int*) malloc(sizeof(int) * sizeConvX[beta+1]);
+	int *Pool = (int*) malloc(sizeof(int) * sizePool[B]);
 	
 	// initialize
 	for(i=0; i<pData->D0; i++) ConvX[i] = pData->x[index][i];
@@ -1160,6 +1177,7 @@ void CTraining::ConvThreadFunc(int index)
 	free(ReLU);
 	free(ConvX);
 	free(convReLU);
+	free(Pool);
 }
 
 int CTraining::FCThreadFunc(int index)

@@ -27,7 +27,7 @@ private:
 	// and Nt is the number of test sets
 	// D is the dimension of each layer (D[0] becomes the dimension of input layer)
 	int A, B, C, *D, *F, *S, *P, alpha, beta, N, Nt, count, l, learningSize, loaded;
-	int *width, *height, *depth, *sizeW, *sizeb, *sizes, *sizeConvX, *sizeConvW, *sizeConvb;
+	int *width, *height, *depth, *sizeW, *sizeb, *sizes, *sizeConvX, *sizeConvW, *sizeConvb, *sizePool;
 	// dW, db each stands for ds/dW, ds/db matrices
 	// dLdW, dLdb corresponds to dL/dW, dL/db
 	// vecdW, vecdb are used for momentum update
@@ -47,6 +47,7 @@ private:
 	int indexOfConvX(int u, int i, int j, int k);
 	int indexOfconvW(int u, int v, int i, int j, int k);
 	int indexOfconvb(int u, int v);
+	int indexOfPool(int m, int i, int j, int k);
 	double XValueOfIndex(double *pt, int m, int i, int j, int k);
 	double GradientCheck();
 	CKeyinter Key;
