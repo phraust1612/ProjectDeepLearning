@@ -62,6 +62,7 @@ CTraining::CTraining(CDataread* pD)
 	sizeConvW = NULL;
 	sizeConvb = NULL;
 	sizeConvX = NULL;
+	sizePool = NULL;
 	automode = 'n';
 	W = NULL;
 	dLdW = NULL;
@@ -107,6 +108,7 @@ void CTraining::FreeMem()
 	if(sizeConvW != NULL) free(sizeConvW);
 	if(sizeConvb != NULL) free(sizeConvb);
 	if(sizeConvX != NULL) free(sizeConvX);
+	if(sizePool != NULL) free(sizePool);
 	if(D != NULL) free(D);
 	if(F != NULL) free(F);
 	if(S != NULL) free(S);
@@ -254,54 +256,93 @@ int CTraining::WeightLoad(char* argv)
 	// read version
 	int ver[2];
 	fread(ver, sizeof(int), 2, fpWeight);
-	if(ver[0] != 2 || ver[1] != 1)
+	if(ver[0] == 2 && ver[1] == 1)
 	{
-		fclose(fpWeight);
-		return ERR_NOTSUPPORTEDVERSION;
+		// scan alpha - the number of layers including score layer
+		fread(&alpha, sizeof(int), 1, fpWeight);
+		// scan hyperparameters, etc.
+		D = (int*) malloc(sizeof(int) * (alpha+1));
+		fread(D, sizeof(int), alpha+1, fpWeight);
+		fread(&H, sizeof(double), 1, fpWeight);
+		fread(&DELTA, sizeof(double), 1, fpWeight);
+		fread(&LAMBDA, sizeof(double), 1, fpWeight);
+		fread(&MOMENTUMUPDATE, sizeof(double), 1, fpWeight);
+		fread(&count, sizeof(int), 1, fpWeight);
+		fread(&learningSize, sizeof(int), 1, fpWeight);
+		if(count == learningSize) err = EXC_TRAININGDONE;
+		fread(&l, sizeof(int), 1, fpWeight);
+		fread(&L, sizeof(double), 1, fpWeight);
+		fread(&Lold, sizeof(double), 1, fpWeight);
+		A = 0;
+		B = 0;
+		C = alpha-1;
+		beta = 0;
+		
+		width = (int*) malloc(sizeof(int) * (beta+1));
+		height = (int*) malloc(sizeof(int) * (beta+1));
+		depth = (int*) malloc(sizeof(int) * (beta+1));
+		
+		width[0] = pData->row;
+		height[0] = pData->col;
+		depth[0] = pData->depth;
+		
+		// allocate memories
+		ParamAllocate();
+		
+		// scan W,b etc
+		fread(W, sizeof(double), sizeW[alpha], fpWeight);
+		fread(b, sizeof(double), sizeb[alpha], fpWeight);
+		// scan gradients
+		fread(dLdW, sizeof(double), sizeW[alpha], fpWeight);
+		fread(dLdb, sizeof(double), sizeb[alpha], fpWeight);
+		fread(vecdW, sizeof(double), sizeW[alpha], fpWeight);
+		fread(vecdb, sizeof(double), sizeb[alpha], fpWeight);
 	}
+	else if(ver[0] == 2 && ver[1] == 2)
+	{
+		fread(&A, sizeof(int), 1, fpWeight);
+		fread(&B, sizeof(int), 1, fpWeight);
+		fread(&C, sizeof(int), 1, fpWeight);
+		alpha = C+1;
+		if(B) beta = (A+1)*B;
+		else beta = A;
+		
+		D = (int*) malloc(sizeof(int) * (alpha+1));
+		fread(D, sizeof(int), alpha+1, fpWeight);
+		fread(&H, sizeof(double), 1, fpWeight);
+		fread(&DELTA, sizeof(double), 1, fpWeight);
+		fread(&LAMBDA, sizeof(double), 1, fpWeight);
+		fread(&MOMENTUMUPDATE, sizeof(double), 1, fpWeight);
+		fread(&count, sizeof(int), 1, fpWeight);
+		fread(&learningSize, sizeof(int), 1, fpWeight);
+		if(count == learningSize) err = EXC_TRAININGDONE;
+		fread(&l, sizeof(int), 1, fpWeight);
+		fread(&L, sizeof(double), 1, fpWeight);
+		fread(&Lold, sizeof(double), 1, fpWeight);
+		width = (int*) malloc(sizeof(int) * (beta+1));
+		height = (int*) malloc(sizeof(int) * (beta+1));
+		depth = (int*) malloc(sizeof(int) * (beta+1));
+		
+		width[0] = pData->row;
+		height[0] = pData->col;
+		depth[0] = pData->depth;
+		
+		// allocate memories
+		ParamAllocate();
+		
+		// scan W,b etc
+		fread(W, sizeof(double), sizeW[alpha], fpWeight);
+		fread(b, sizeof(double), sizeb[alpha], fpWeight);
+		// scan gradients
+		fread(dLdW, sizeof(double), sizeW[alpha], fpWeight);
+		fread(dLdb, sizeof(double), sizeb[alpha], fpWeight);
+		fread(vecdW, sizeof(double), sizeW[alpha], fpWeight);
+		fread(vecdb, sizeof(double), sizeb[alpha], fpWeight);
+	}
+	else err = ERR_NOTSUPPORTEDVERSION;
 	
-	// scan alpha - the number of layers including score layer
-	fread(&alpha, sizeof(int), 1, fpWeight);
-	// scan hyperparameters, etc.
-	D = (int*) malloc(sizeof(int) * (alpha+1));
-	fread(D, sizeof(int), alpha+1, fpWeight);
-	fread(&H, sizeof(double), 1, fpWeight);
-	fread(&DELTA, sizeof(double), 1, fpWeight);
-	fread(&LAMBDA, sizeof(double), 1, fpWeight);
-	fread(&MOMENTUMUPDATE, sizeof(double), 1, fpWeight);
-	fread(&count, sizeof(int), 1, fpWeight);
-	fread(&learningSize, sizeof(int), 1, fpWeight);
-	if(count == learningSize) err = EXC_TRAININGDONE;
-	fread(&l, sizeof(int), 1, fpWeight);
-	fread(&L, sizeof(double), 1, fpWeight);
-	fread(&Lold, sizeof(double), 1, fpWeight);
-	A = 0;
-	B = 0;
-	C = alpha-1;
-	beta = 0;
-	
-	width = (int*) malloc(sizeof(int) * (beta+1));
-	height = (int*) malloc(sizeof(int) * (beta+1));
-	depth = (int*) malloc(sizeof(int) * (beta+1));
-
-	width[0] = pData->row;
-	height[0] = pData->col;
-	depth[0] = pData->depth;
-	
-	// allocate memories
-	ParamAllocate();
-	
-	// scan W,b etc
-	fread(W, sizeof(double), sizeW[alpha], fpWeight);
-	fread(b, sizeof(double), sizeb[alpha], fpWeight);
-	// scan gradients
-	fread(dLdW, sizeof(double), sizeW[alpha], fpWeight);
-	fread(dLdb, sizeof(double), sizeb[alpha], fpWeight);
-	fread(vecdW, sizeof(double), sizeW[alpha], fpWeight);
-	fread(vecdb, sizeof(double), sizeb[alpha], fpWeight);
 	fclose(fpWeight);
 	loaded=1;
-	
 	return err;
 }
 
@@ -415,7 +456,7 @@ int CTraining::indexOfconvb(int u, int v)
 int CTraining::indexOfPool(int m, int i, int j, int k)
 {
 	int ans, t;
-	t = (m+1)/(A+1);
+	t = m/(A+1);
 	ans = height[m]*k + j;
 	ans *= width[m];
 	ans += i + sizePool[t];
@@ -477,7 +518,7 @@ void CTraining::ParamAllocate()
 		else
 		{
 			j = (i+1)/(A+1);
-			sizePool[j] = sizePool[j-1] + sizeConvX[i+1] - sizeConvX[i];
+			sizePool[j] = sizePool[j-1] + width[i+1] * height[i+1] * depth[i+1];
 		}
 	}
 	sizeConvX[beta+1] = sizeConvX[beta] + width[beta]*height[beta]*depth[beta];
@@ -750,8 +791,10 @@ void CTraining::Training(int threads)
 // file format : 
 // offset	type			description
 // 0x0000	2byte			magic number : "PD"
-// 0x0002	8byte			version (2 integers) 2 & 1
-// 0x0010	4byte integer	alpha
+// 0x0002	8byte			version (2 integers) 2 & 2
+// 0x0010	4byte integer	A
+// 0x0010	4byte integer	B
+// 0x0010	4byte integer	C
 // 0x0014	4byte integer	D[0]
 // 0x0018	4byte integer	D[1]
 // 				...
@@ -765,6 +808,12 @@ void CTraining::Training(int threads)
 //			4byte int		l (do not write behind if training ended)
 //			8byte double	L
 //			8byte double	Lold
+//			8byte double	ConvW[0]
+//				...
+//			8byte double	ConvW[sizeConvW[beta]-1]
+//			8byte double	Convb[0]
+//				...
+//			8byte double	Convb[sizeConvb[beta]-1]
 //			8byte double	W[0]
 //				...
 //			8byte double	W[sizeW[alpha]-1]
@@ -793,7 +842,7 @@ void CTraining::FileSave()
 	magic[0] = 'P';
 	magic[1] = 'D';
 	ver[0] = 2;
-	ver[1] = 1;
+	ver[1] = 2;
 	fwrite(magic, sizeof(char), 2, fpResult);
 	fwrite(ver, sizeof(int), 2, fpResult);
 	fwrite(&alpha, sizeof(int), 1, fpResult);
@@ -1024,7 +1073,15 @@ void CTraining::ConvThreadFunc(int index)
 	int m,i,j,k,i2,j2,k2,tmp;
 	double *ConvX = (double*)malloc(sizeof(double) * sizeConvX[beta+1]);
 	bool *convReLU = (bool*)malloc(sizeof(bool) * sizeConvX[beta+1]);
-	int *Pool = (int*) malloc(sizeof(int) * sizePool[B]);
+	int *Pooledi = (int*) malloc(sizeof(int) * sizePool[B]);
+	int *Pooledj = (int*) malloc(sizeof(int) * sizePool[B]);
+	double *ConvdX = (double*)malloc(sizeof(double) * D[alpha] * sizeConvX[beta+1]);
+	double *ConvdW = (double*)malloc(sizeof(double) * D[alpha] * sizeConvW[beta]);
+	double *Convdb = (double*)malloc(sizeof(double) * D[alpha] * sizeConvb[beta]);
+	double* X = (double*) malloc(sizeof(double) * sizes[alpha+1]);
+	double* dW = (double*) malloc(sizeof(double) * D[alpha] * sizeW[alpha]);
+	double* db = (double*) malloc(sizeof(double) * D[alpha] * sizeb[alpha]);
+	bool* ReLU = (bool*) malloc(sizeof(bool) * sizes[alpha+1]);
 	
 	// initialize
 	for(i=0; i<pData->D0; i++) ConvX[i] = pData->x[index][i];
@@ -1033,19 +1090,19 @@ void CTraining::ConvThreadFunc(int index)
 	for(m=0; m<beta; m++)
 	{
 		// Pooling layer
-		if((B>0) && !((i+1)%(A+1)))
+		if((B>0) && !((m+1)%(A+1)))
 		for(i2=0; i2<width[m+1]; i2++)
 		for(j2=0; j2<height[m+1]; j2++)
 		for(k2=0; k2<depth[m+1]; k2++)
 		{
 			ConvX[indexOfConvX(m+1,i2,j2,k2)] = 0;
-			for(i=i2*S[m]; i<i2*S[m]+F[m]; i++)
-			for(j=j2*S[m]; j<j2*S[m]+F[m]; j++)
-			if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < ConvX[indexOfConvX(m,i,j,k2)])
+			for(I=i2*S[m]; I<i2*S[m]+F[m]; I++)
+			for(J=j2*S[m]; J<j2*S[m]+F[m]; J++)
+			if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < ConvX[indexOfConvX(m,I,J,k2)])
 			{
-				ConvX[indexOfConvX(m+1,i2,j2,k2)] = ConvX[indexOfConvX(m,i,j,k2)];
-				//Pooledi[indexofConvX(m+1,i2,j2,k2)] = i;
-				//Pooledj[indexofConvX(m+1,i2,j2,k2)] = j;
+				ConvX[indexOfConvX(m+1,i2,j2,k2)] = ConvX[indexOfConvX(m,I,J,k2)];
+				Pooledi[indexofPool(m+1,i2,j2,k2)] = I;
+				Pooledj[indexofPool(m+1,i2,j2,k2)] = J;
 			}
 		}
 		
@@ -1060,21 +1117,17 @@ void CTraining::ConvThreadFunc(int index)
 			for(j=0; j<F[m]; j++)
 			for(k=0; k<depth[m]; k++)
 			{
-				ConvX[indexOfConvX(m+1,i2,j2,k2)] += XValueOfIndex(ConvX, m, i2*S[m]+i, j2*S[m]+j, k) * convW[indexOfconvW(m,k2,i,j,k)];
+				I = i+i2*S[m]-P[m];
+				J = j+j2*S[m]-P[m];
+				if(I<0 || I>=width[m] || J<0 || J>=height[m]) continue;
+				if(ReLU[indexOfConvX(m,I,J,k)])
+					ConvX[indexOfConvX(m+1,i2,j2,k2)] += ConvX[indexOfConvX(m,I,J,k)] * convW[indexOfconvW(m,k2,i,j,k)];
 				if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < 0) convReLU[indexOfConvX(m+1,i2,j2,k2)] = 0;
+				else convReLU[indexOfConvX(m+1,i2,j2,k2)] = 1;
 			}
 		}
 	}
 	// Conv & Pool layer ended
-	
-	// X^(i+1) = W^i * delta^i * X^i + b^i
-	double* X = (double*) malloc(sizeof(double) * sizes[alpha+1]);
-	// dW[indexOfW(m,i,j,k)] : ds^alpha_i / dW^m_j,k
-	double* dW = (double*) malloc(sizeof(double) * D[alpha] * sizeW[alpha]);
-	// db[sizeOfb(m,i,j)] : ds^alpha_i / db^m_j
-	// and this is exactly same as ds^alpha_i / ds^(m+1)_j mathematically
-	double* db = (double*) malloc(sizeof(double) * D[alpha] * sizeb[alpha]);
-	bool* ReLU = (bool*) malloc(sizeof(bool) * sizes[alpha+1]);
 	
 	// initialize score function and ReLU chronicle
 	for(j=0; j<D[0]; j++)
@@ -1149,13 +1202,73 @@ void CTraining::ConvThreadFunc(int index)
 		}
 	}
 	
+	for(i=0; i<D[alpha] * sizeConvX[beta+1]; i++) convdX[i] = 0;
+	for(i=0; i<D[alpha] * sizeConvW[beta]; i++) convdW[i] = 0;
+	for(i=0; i<D[alpha] * sizeConvb[beta]; i++) convdb[i] = 0;
+	// calculate initial gradient of convdX
+	for(u=0; u<D[alpha]; u++)
+	{
+		tmp = indexOfConvdX(beta, u, 0,0,0);
+		for(v=0; v<D[0]; v++)
+		{
+			if(ReLU[indexOfs(0,v)])
+			for(i=0; i<D[1]; i++)
+				ConvdX[tmp+v] += db[indexOfdb(0,u,i)] * W[indexOfW(0,i,v)];
+		}
+	}
+	
+	// calculate gradient of CNN for general cases
+	for(m=beta-1; m>=0; m--)
+	{
+		// Pooling layer
+		if(B && !((m+1)%(A+1)))
+		{
+			for(I=0; I<width[m]; I++)
+			for(J=0; J<height[m]; j++)
+			for(k=0; k<depth[m]; k++)
+			{
+				for(i2=(int)(I-F[m])/S[m] + 1; i2<(int)I/S[m]; i2++)
+				for(j2=(int)(J-F[m])/S[m] + 1; j2<(int)J/S[m]; j2++)
+				if(I==Pooledi[indexOfPool(m+1,i2,j2,k)] && J==Pooledj[inidexOfPool(m+1,i2,j2,k)])
+				for(u=0; u<D[alpha]; u++)
+					ConvdX[indexOfConvdX(u,m,I,J,k)] += ConvdX[indexOfConvdX(u,m+1,i2,j2,k)];
+			}
+		}
+	
+		// Conv layer
+		else
+		{
+			for(i2=0; i2<width[m+1]; i2++)
+			for(j2=0; j2<height[m+1]; j2++)
+			for(k2=0; k2<depth[m+1]; k2++)
+			{
+				for(i=0; i<F[m]; i++)
+				for(j=0; j<F[m]; j++)
+				for(k=0; k<depth[m]; k++)
+				{
+					I = i+i2*S[m]-P[m];
+					J = j+j2*S[m]-P[m];
+					if(I<0 || I>=width[m] || J<0 || J>=height[m]) continue;
+					if(ConvReLU[indexOfConvX(m,I,J,k)])
+					{
+						// ConvdX
+						ConvdX[indexOfConvdX(u,m,I,J,k)] += ConvdX[indexOfConvdX(u,m+1,i2,j2,k2)] * ConvW[indexOfConvW(m,k2,i,j,k)];
+						// ConvdW
+						ConvdW[indexOfConvdW(u,m,k2,i,j,k)] += ConvdX[indexOfConvdX(u,m+1,i2,j2,k2)] * ConvX[indexOfConvX(m,I,J,k)];
+					}
+				}
+				Convdb[indexOfConvdb(u,m,k2)] += ConvdX[indexOfConvdX(u,m+1,i2,j2,k2)];
+			}
+		}
+	}
+	
 	// this is a procedure of calculating loss function
 	// according to SVM and its gradient about W,b
 	// L_l = sig_i
-	for(i=0; i<D[alpha]; i++)
+	for(u=0; u<D[alpha]; u++)
 	{
-		if(i == pData->y[index]) continue;
-		if((tmp = X[indexOfs(alpha,i)] - X[indexOfs(alpha,pData->y[index])] + DELTA) > 0)
+		if(u == pData->y[index]) continue;
+		if((tmp = X[indexOfs(alpha,u)] - X[indexOfs(alpha,pData->y[index])] + DELTA) > 0)
 		{
 			L += tmp;
 			for(m=0; m<alpha; m++)
@@ -1163,9 +1276,19 @@ void CTraining::ConvThreadFunc(int index)
 				for(j=0; j<D[m+1]; j++)
 				{
 					for(k=0; k<D[m]; k++)
-						dLdW[indexOfW(m,j,k)] += dW[indexOfdW(m,i,j,k)] - dW[indexOfdW(m,pData->y[index],j,k)];
-					dLdb[indexOfb(m,j)] += db[indexOfdb(m,i,j)] - db[indexOfdb(m,pData->y[index],j)];
+						dLdW[indexOfW(m,j,k)] += dW[indexOfdW(m,u,j,k)] - dW[indexOfdW(m,pData->y[index],j,k)];
+					dLdb[indexOfb(m,j)] += db[indexOfdb(m,u,j)] - db[indexOfdb(m,pData->y[index],j)];
 				}
+			}
+			for(m=0; m<beta; m++)
+			if(!B || ((m+1)%(A+1)))
+			for(k2=0; k2<depth[m+1]; k2++)
+			{
+				for(i=0; i<F[m]; i++)
+				for(j=0; j<F[m]; j++)
+				for(k=0; k<depth[m]; k++)
+					ConvdLdW[indexOfConvW(m,k2,i,j,k)] += ConvdW[indexOfConvdW(u,m,k2,i,j,k)] - ConvdW[indexOfConvdW(pData->y[index],m,k2,i,j,k)];
+				ConvdLdb[indexOfConvb(m,k2)] += Convdb[indexOfConvdb(u,m,k2)] - Convdb[indexOfConvdb(pData->y[index],m,k2)];
 			}
 		}
 	}
@@ -1177,7 +1300,11 @@ void CTraining::ConvThreadFunc(int index)
 	free(ReLU);
 	free(ConvX);
 	free(convReLU);
-	free(Pool);
+	free(Pooledi);
+	free(Pooledj);
+	free(ConvdX);
+	free(ConvdW);
+	free(Convdb);
 }
 
 int CTraining::FCThreadFunc(int index)
