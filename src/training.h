@@ -27,12 +27,12 @@ private:
 	// and Nt is the number of test sets
 	// D is the dimension of each layer (D[0] becomes the dimension of input layer)
 	int A, B, C, *D, *F, *S, *P, alpha, beta, N, Nt, count, l, learningSize, loaded;
-	int *width, *height, *depth, *sizeW, *sizeb, *sizes, *sizeConvX, *sizeConvW, *sizeConvb;
+	int *width, *height, *depth, *sizeW, *sizeb, *sizes, *sizeConvX, *sizeConvW, *sizeConvb, *sizePool;
 	// dW, db each stands for ds/dW, ds/db matrices
 	// dLdW, dLdb corresponds to dL/dW, dL/db
 	// vecdW, vecdb are used for momentum update
 	// olddLdW, olddLdb, oldvecdW, oldvecdb are used for gradient check
-	double *W, *b, *dLdW, *dLdb, *vecdW, *vecdb, *convW, *convb, *convdLdW, *convdLdb;
+	double *W, *b, *dLdW, *dLdb, *vecdW, *vecdb, *ConvW, *Convb, *ConvdLdW, *ConvdLdb, *vecConvdW, *vecConvdb;
 	// DELTA, LAMBDA, MOMENTUMUPDATE are hyperparameters
 	// L is loss function value, Lold is previous loss value
 	// H is the learning rate, which is also kind of hyperparameters
@@ -45,9 +45,12 @@ private:
 	int indexOfdW(int m, int i, int j, int k);
 	int indexOfdb(int m, int i, int j);
 	int indexOfConvX(int u, int i, int j, int k);
-	int indexOfconvW(int u, int v, int i, int j, int k);
-	int indexOfconvb(int u, int v);
-	double XValueOfIndex(double *pt, int m, int i, int j, int k);
+	int indexOfConvW(int u, int v, int i, int j, int k);
+	int indexOfConvb(int u, int v);
+	int indexOfPool(int m, int i, int j, int k);
+	int indexOfConvdX(int u, int m, int i, int j, int k);
+	int indexOfConvdW(int u, int m, int v, int i, int j, int k);
+	int indexOfConvdb(int u, int m, int v);
 	double GradientCheck();
 	CKeyinter Key;
 #if CUDAEXIST
@@ -66,10 +69,11 @@ public:
 	void Training(int threads);
 	void FileSave();
 	void ShowHelp();
-	int FCThreadFunc(int index);
-	void ConvThreadFunc(int index);
+	int RNNThreadFunc(int index);
+	void CNNThreadFunc(int index);
 	void FreeMem();
 	int SetHyperparam(ValidationParam validateMode, int lPar, double hyperparam);
 	double CheckAccuracy();
+	double CheckRNNAccuracy();
 };
 #endif
