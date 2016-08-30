@@ -872,18 +872,18 @@ void CTraining::Training(int threads)
 //			4byte int		l (do not write behind if training ended)
 //			8byte double	L
 //			8byte double	Lold
-//			8byte double	ConvW[0]
-//				...
-//			8byte double	ConvW[sizeConvW[beta]-1]
-//			8byte double	Convb[0]
-//				...
-//			8byte double	Convb[sizeConvb[beta]-1]
 //			8byte double	W[0]
 //				...
 //			8byte double	W[sizeW[alpha]-1]
 //			8byte double	b[0]
 //				...
 //			8byte double	b[sizeb[alpha]-1]
+//			8byte double	ConvW[0]
+//				...
+//			8byte double	ConvW[sizeConvW[beta]-1]
+//			8byte double	Convb[0]
+//				...
+//			8byte double	Convb[sizeConvb[beta]-1]
 //			8byte double	dLdW[0]
 //				...
 //			8byte double	dLdW[sizeW[alpha]-1]
@@ -1047,66 +1047,111 @@ double CTraining::GradientCheck()
 
 double CTraining::CheckAccuracy()
 {
-	int i, j, k, m;
-	double* s = (double*) malloc(sizeof(double) * sizes[alpha+1]);
+	int t,m,i,j,k,i2,j2,k2,I,J,u,tmp,correctnum,ans;
+	double *ConvX = (double*)malloc(sizeof(double) * sizeConvX[beta+1]);
+	double* X = (double*) malloc(sizeof(double) * sizes[alpha+1]);
 	
-	int count = 0;	// number of how many images were correct
-	int ans;			// temporary answer
+	correctnum = 0;	// number of how many images were correct
 	double highest;		// temporary score used for seeking highest score
 	double proc;
 	// computing score function for each test images
-	for(m=0; m<Nt; m++)	// m is an index for each picture
+	for(t=0; t<Nt; t++)	// t is an index for each picture
 	{
 		j=0;
-		// initializaing...
-		for(i=0; i<D[0]; i++)
-			s[indexOfs(0,i)] = pData->xt[m][i];	// initializing s_0 = x_l
+		
+		// initialize
+		for(i=0; i<pData->D0; i++)
+			ConvX[i] = pData->xt[t][i];
+		
+		// Conv and Pooling layer procedure
+		for(m=0; m<beta; m++)
+		{
+			// Pooling layer
+			if((B>0) && !((m+1)%(A+1)))
+			for(i2=0; i2<width[m+1]; i2++){
+			for(j2=0; j2<height[m+1]; j2++){
+			for(k2=0; k2<depth[m+1]; k2++)
+			{
+				ConvX[indexOfConvX(m+1,i2,j2,k2)] = 0;
+				for(I=i2*S[m]; I<i2*S[m]+F[m]; I++){
+				for(J=j2*S[m]; J<j2*S[m]+F[m]; J++){
+				if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < ConvX[indexOfConvX(m,I,J,k2)])
+				{
+					ConvX[indexOfConvX(m+1,i2,j2,k2)] = ConvX[indexOfConvX(m,I,J,k2)];
+				}}}
+			}}}
+			
+			// Conv layer
+			else
+			for(i2=0; i2<width[m+1]; i2++){
+			for(j2=0; j2<height[m+1]; j2++){
+			for(k2=0; k2<depth[m+1]; k2++)
+			{
+				ConvX[indexOfConvX(m+1,i2,j2,k2)] = Convb[indexOfConvb(m,k2)];
+				for(i=0; i<F[m]; i++){
+				for(j=0; j<F[m]; j++){
+				for(k=0; k<depth[m]; k++)
+				{
+					I = i+i2*S[m]-P[m];
+					J = j+j2*S[m]-P[m];
+					if(I<0 || I>=width[m] || J<0 || J>=height[m]) continue;
+						ConvX[indexOfConvX(m+1,i2,j2,k2)] += ConvX[indexOfConvX(m,I,J,k)] * ConvW[indexOfConvW(m,k2,i,j,k)];
+				}}}
+				if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < 0) ConvX[indexOfConvX(m+1,i2,j2,k2)] = 0;
+			}}}
+		}
+		// Conv & Pool layer ended
+		
+		i = indexOfConvW(beta,0,0,0,0);
+		for(j=0; j<D[0]; j++)
+			X[j] = ConvX[j+i];
 		
 		// this loop is a procedure of score function
-		for(i=0; i<alpha; i++)
+		for(i=0; i<C; i++)
 		{
 			for(j=0; j<D[i+1]; j++)
 			{
-				s[indexOfs(i+1,j)] = b[indexOfb(i,j)];
-				// st^i = W^(i-1) * deltat^(i-1) * st^(i-1) + b^(i-1)
+				X[indexOfs(i+1,j)] = b[indexOfb(i,j)];
+				// X^(i+1) = W^i * ReLU^i * X^i + b^i
 				for(k=0; k<D[i]; k++)
-					s[indexOfs(i+1,j)] += W[indexOfW(i,j,k)] * s[indexOfs(i,k)];
-				if(s[indexOfs(i+1,j)] < 0) s[indexOfs(i+1,j)] = 0;
+					X[indexOfs(i+1,j)] += W[indexOfW(i,j,k)] * X[indexOfs(i,k)];
+				//ReLU^i_j = 1 if X^i_j>0, 0 otherwise
+				if(X[indexOfs(i+1,j)] < 0) X[indexOfs(i+1,j)] = 0;
 			}
 		}
 		
-		// final FC layer without RELU
 		for(j=0; j<D[alpha]; j++)
 		{
-			s[indexOfs(alpha,j)] = b[indexOfb(C,j)];
+			X[indexOfs(alpha,j)] = b[indexOfb(C,j)];
 			for(k=0; k<D[C]; k++)
-				s[indexOfs(alpha,j)] += W[indexOfW(C,j,k)] * s[indexOfs(C,k)];
+				X[indexOfs(alpha,j)] += W[indexOfW(C,j,k)] * X[indexOfs(C,k)];
 		}
 		
 		// compare with answer and calculate the accuracy
-		// firstly find m'th image's highest score and its label
+		// firstly find t'th image's highest score and its label
 		ans=0;
-		highest=s[indexOfs(alpha,0)];
+		highest=X[indexOfs(alpha,0)];
 		for(j=1; j<D[alpha]; j++)
 		{
-			if(s[indexOfs(alpha,j)] > highest)
+			if(X[indexOfs(alpha,j)] > highest)
 			{
 				ans = j;
-				highest = s[indexOfs(alpha,j)];
+				highest = X[indexOfs(alpha,j)];
 			}
 		}
 		// accumulate count if ans is correct
-		if(ans == pData->yt[m]) count++;
+		if(ans == pData->yt[t]) correctnum++;
 		
-		proc = (double) 100 * m/Nt;
+		proc = (double) 100 * t/Nt;
 		printf("%2.2lf%%\b\b\b\b\b",proc);
 		if(proc>9.995) printf("\b");
 		if(proc>=99.995) printf("\b");
 	}
 	printf("done...");
 	
-	free(s);
-	highest = (double) (100*count)/Nt;
+	free(X);
+	free(ConvX);
+	highest = (double) (100*correctnum)/Nt;
 	return highest;
 }
 
@@ -1170,7 +1215,11 @@ void CTraining::CNNThreadFunc(int index)
 	}
 	
 	// initialize
-	for(i=0; i<pData->D0; i++) ConvX[i] = pData->x[index][i];
+	for(i=0; i<pData->D0; i++)
+	{
+		ConvX[i] = pData->x[index][i];
+		ConvReLU[i] = 1;
+	}
 	
 	// Conv and Pooling layer procedure
 	for(m=0; m<beta; m++)
@@ -1208,18 +1257,18 @@ void CTraining::CNNThreadFunc(int index)
 				if(I<0 || I>=width[m] || J<0 || J>=height[m]) continue;
 				if(ConvReLU[indexOfConvX(m,I,J,k)])
 					ConvX[indexOfConvX(m+1,i2,j2,k2)] += ConvX[indexOfConvX(m,I,J,k)] * ConvW[indexOfConvW(m,k2,i,j,k)];
-				if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < 0) ConvReLU[indexOfConvX(m+1,i2,j2,k2)] = 0;
-				else ConvReLU[indexOfConvX(m+1,i2,j2,k2)] = 1;
 			}}}
+			if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < 0) ConvReLU[indexOfConvX(m+1,i2,j2,k2)] = 0;
+			else ConvReLU[indexOfConvX(m+1,i2,j2,k2)] = 1;
 		}}}
 	}
 	// Conv & Pool layer ended
 	
-	// initialize score function and ReLU chronicle
+	i = indexOfConvW(beta,0,0,0,0);
 	for(j=0; j<D[0]; j++)
 	{
-		X[indexOfs(0,j)] = pData->x[index][j];	// initializing sBef = x_l
-		ReLU[indexOfs(0,j)] = 1;	// initializing first deltaBef
+		X[j] = ConvX[j+i];
+		ReLU[j] = ConvReLU[j+i];
 	}
 	
 	// this loop is a procedure of score function
@@ -1287,6 +1336,7 @@ void CTraining::CNNThreadFunc(int index)
 			}
 		}
 	}
+	// computing gradients of FC Weights is done
 	
 	for(i=0; i<D[alpha] * sizeConvX[beta+1]; i++) ConvdX[i] = 0;
 	for(i=0; i<D[alpha] * sizeConvW[beta]; i++) ConvdW[i] = 0;
@@ -1294,7 +1344,7 @@ void CTraining::CNNThreadFunc(int index)
 	// calculate initial gradient of convdX
 	for(u=0; u<D[alpha]; u++)
 	{
-		tmp = indexOfConvdX(beta, u, 0,0,0);
+		tmp = indexOfConvdX(u,beta,0,0,0);
 		for(int v=0; v<D[0]; v++)
 		{
 			if(ReLU[indexOfs(0,v)])
