@@ -285,6 +285,7 @@ int CTraining::WeightLoad(char* argv)
 	fread(ver, sizeof(int), 2, fpWeight);
 	if(ver[0] == 2 && ver[1] == 1)
 	{
+		printf("%s loaded ver 2.1\n",savefilename);
 		// scan alpha - the number of layers including score layer
 		fread(&alpha, sizeof(int), 1, fpWeight);
 		// scan hyperparameters, etc.
@@ -335,7 +336,22 @@ int CTraining::WeightLoad(char* argv)
 		else beta = A;
 		
 		D = (int*) malloc(sizeof(int) * (alpha+1));
+		F = (int*) malloc(sizeof(int) * beta);
+		S = (int*) malloc(sizeof(int) * beta);
+		P = (int*) malloc(sizeof(int) * beta);
+		width = (int*) malloc(sizeof(int) * (beta+1));
+		height = (int*) malloc(sizeof(int) * (beta+1));
+		depth = (int*) malloc(sizeof(int) * (beta+1));
+		
+		width[0] = pData->row;
+		height[0] = pData->col;
+		depth[0] = pData->depth;
+		
 		fread(D, sizeof(int), alpha+1, fpWeight);
+		fread(F, sizeof(int), beta, fpWeight);
+		fread(S, sizeof(int), beta, fpWeight);
+		fread(P, sizeof(int), beta, fpWeight);
+		fread(depth+1, sizeof(int), beta, fpWeight);
 		fread(&H, sizeof(double), 1, fpWeight);
 		fread(&DELTA, sizeof(double), 1, fpWeight);
 		fread(&LAMBDA, sizeof(double), 1, fpWeight);
@@ -346,13 +362,18 @@ int CTraining::WeightLoad(char* argv)
 		fread(&l, sizeof(int), 1, fpWeight);
 		fread(&L, sizeof(double), 1, fpWeight);
 		fread(&Lold, sizeof(double), 1, fpWeight);
-		width = (int*) malloc(sizeof(int) * (beta+1));
-		height = (int*) malloc(sizeof(int) * (beta+1));
-		depth = (int*) malloc(sizeof(int) * (beta+1));
 		
-		width[0] = pData->row;
-		height[0] = pData->col;
-		depth[0] = pData->depth;
+		for(i=0; i<beta; i++)
+		{
+			width[i+1] = width[i] - F[i] + 2*P[i];
+			height[i+1] = height[i] - F[i] + 2*P[i];
+			if((width[i+1] % S[i]) == 0 && (height[i+1] % S[i]) == 0)
+			{
+				width[i+1] = width[i+1] / S[i] + 1;
+				height[i+1] = height[i+1] / S[i] + 1;
+			}
+			else err = ERR_UNDIVISIBLESTRIDE;
+		}
 		
 		// allocate memories
 		ParamAllocate();
@@ -863,6 +884,22 @@ void CTraining::Training(int threads)
 // 0x0018	4byte integer	D[1]
 // 				...
 // 			4byte integer	D[alpha]
+//			4byte integer	F[0]
+//			4byte integer	F[1]
+//				...
+//			4byte integer	F[beta-1]
+//			4byte integer	S[0]
+//			4byte integer	S[1]
+//				...
+//			4byte integer	S[beta-1]
+//			4byte integer	P[0]
+//			4byte integer	P[1]
+//				...
+//			4byte integer	P[beta-1]
+//			4byte integer	depth[1]
+//			4byte integer	depth[2]
+//				...
+//			4byte integer	depth[beta]
 //			8byte double	H
 //			8byte double	DELTA
 //			8byte double	LAMBDA
@@ -873,13 +910,21 @@ void CTraining::Training(int threads)
 //			8byte double	L
 //			8byte double	Lold
 //			8byte double	W[0]
+//			8byte double	W[1]
 //				...
+//			8byte double	W[sizeW[alpha]-1]
 //			8byte double	b[0]
+//			8byte double	b[1]
 //				...
+//			8byte double	b[sizeb[alpha]-1]
 //			8byte double	ConvW[0]
+//			8byte double	ConvW[1]
 //				...
+//			8byte double	ConvW[sizeConvW[beta]-1]
 //			8byte double	Convb[0]
+//			8byte double	Convb[1]
 //				...
+//			8byte double	Convb[sizeConvb[beta]-1]
 //			8byte double	dLdW[0]
 //				...
 //			8byte double	dLdb[0]
@@ -913,6 +958,10 @@ void CTraining::FileSave()
 	fwrite(&B, sizeof(int), 1, fpResult);
 	fwrite(&C, sizeof(int), 1, fpResult);
 	fwrite(D, sizeof(int), alpha+1, fpResult);
+	fwrite(F, sizeof(int), beta, fpResult);
+	fwrite(S, sizeof(int), beta, fpResult);
+	fwrite(P, sizeof(int), beta, fpResult);
+	fwrite(depth+1, sizeof(int), beta, fpResult);
 	fwrite(&H, sizeof(double), 1, fpResult);
 	fwrite(&DELTA, sizeof(double), 1, fpResult);
 	fwrite(&LAMBDA, sizeof(double), 1, fpResult);
@@ -1039,6 +1088,8 @@ double CTraining::GradientCheck()
 
 double CTraining::CheckAccuracy()
 {
+	if(!A && !B) return CheckRNNAccuracy();
+	
 	int t,m,i,j,k,i2,j2,k2,I,J,u,tmp,correctnum,ans;
 	double *ConvX = (double*)malloc(sizeof(double) * sizeConvX[beta+1]);
 	double* X = (double*) malloc(sizeof(double) * sizes[alpha+1]);
@@ -1049,8 +1100,6 @@ double CTraining::CheckAccuracy()
 	// computing score function for each test images
 	for(t=0; t<Nt; t++)	// t is an index for each picture
 	{
-		j=0;
-		
 		// initialize
 		for(i=0; i<pData->D0; i++)
 			ConvX[i] = pData->xt[t][i];
@@ -1143,6 +1192,69 @@ double CTraining::CheckAccuracy()
 	
 	free(X);
 	free(ConvX);
+	highest = (double) (100*correctnum)/Nt;
+	return highest;
+}
+
+double CTraining::CheckRNNAccuracy()
+{
+	int t,i,j,k,tmp,correctnum,ans;
+	double* X = (double*) malloc(sizeof(double) * sizes[alpha+1]);
+	
+	correctnum = 0;	// number of how many images were correct
+	double highest;		// temporary score used for seeking highest score
+	double proc;
+	// computing score function for each test images
+	for(t=0; t<Nt; t++)	// t is an index for each picture
+	{
+		// initialize
+		for(i=0; i<pData->D0; i++)
+			X[i] = pData->xt[t][i];
+		
+		// this loop is a procedure of score function
+		for(i=0; i<C; i++)
+		{
+			for(j=0; j<D[i+1]; j++)
+			{
+				X[indexOfs(i+1,j)] = b[indexOfb(i,j)];
+				// X^(i+1) = W^i * ReLU^i * X^i + b^i
+				for(k=0; k<D[i]; k++)
+					X[indexOfs(i+1,j)] += W[indexOfW(i,j,k)] * X[indexOfs(i,k)];
+				//ReLU^i_j = 1 if X^i_j>0, 0 otherwise
+				if(X[indexOfs(i+1,j)] < 0) X[indexOfs(i+1,j)] = 0;
+			}
+		}
+		
+		for(j=0; j<D[alpha]; j++)
+		{
+			X[indexOfs(alpha,j)] = b[indexOfb(C,j)];
+			for(k=0; k<D[C]; k++)
+				X[indexOfs(alpha,j)] += W[indexOfW(C,j,k)] * X[indexOfs(C,k)];
+		}
+		
+		// compare with answer and calculate the accuracy
+		// firstly find t'th image's highest score and its label
+		ans=0;
+		highest=X[indexOfs(alpha,0)];
+		for(j=1; j<D[alpha]; j++)
+		{
+			if(X[indexOfs(alpha,j)] > highest)
+			{
+				ans = j;
+				highest = X[indexOfs(alpha,j)];
+			}
+		}
+		// accumulate count if ans is correct
+		if(ans == pData->yt[t]) correctnum++;
+		
+		proc = (double) 100 * t/Nt;
+		printf("%2.2lf%%\b\b\b\b\b",proc);
+		if(proc>9.995) printf("\b");
+		if(proc>=99.995) printf("\b");
+	}
+	printf("done...");
+	
+	free(X);
 	highest = (double) (100*correctnum)/Nt;
 	return highest;
 }

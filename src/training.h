@@ -74,5 +74,6 @@ public:
 	void FreeMem();
 	int SetHyperparam(ValidationParam validateMode, int lPar, double hyperparam);
 	double CheckAccuracy();
+	double CheckRNNAccuracy();
 };
 #endif
