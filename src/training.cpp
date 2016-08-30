@@ -874,40 +874,28 @@ void CTraining::Training(int threads)
 //			8byte double	Lold
 //			8byte double	W[0]
 //				...
-//			8byte double	W[sizeW[alpha]-1]
 //			8byte double	b[0]
 //				...
-//			8byte double	b[sizeb[alpha]-1]
 //			8byte double	ConvW[0]
 //				...
-//			8byte double	ConvW[sizeConvW[beta]-1]
 //			8byte double	Convb[0]
 //				...
-//			8byte double	Convb[sizeConvb[beta]-1]
 //			8byte double	dLdW[0]
 //				...
-//			8byte double	dLdW[sizeW[alpha]-1]
 //			8byte double	dLdb[0]
 //				...
-//			8byte double	dLdb[sizeb[alpha]-1]
 //			8byte double	vecdW[0]
 //				...
-//			8byte double	vecdW[sizeW[alpha]-1]
 //			8byte double	vecdb[0]
 //				...
-//			8byte double	vecdb[sizeb[alpha]-1]
 //			8byte double	ConvdLdW[0]
 //				...
-//			8byte double	ConvdLdW[sizeW[alpha]-1]
 //			8byte double	ConvdLdb[0]
 //				...
-//			8byte double	ConvdLdb[sizeb[alpha]-1]
 //			8byte double	vecConvdW[0]
 //				...
-//			8byte double	vecConvdW[sizeW[alpha]-1]
 //			8byte double	vecConvdb[0]
 //				...
-//			8byte double	vecConvdb[sizeb[alpha]-1]
 void CTraining::FileSave()
 {
 	int i, j;
@@ -942,6 +930,10 @@ void CTraining::FileSave()
 	fwrite(dLdb, sizeof(double), sizeb[alpha], fpResult);
 	fwrite(vecdW, sizeof(double), sizeW[alpha], fpResult);
 	fwrite(vecdb, sizeof(double), sizeb[alpha], fpResult);
+	fwrite(ConvdLdW, sizeof(double), sizeW[beta], fpResult);
+	fwrite(ConvdLdb, sizeof(double), sizeb[beta], fpResult);
+	fwrite(vecConvdW, sizeof(double), sizeW[beta], fpResult);
+	fwrite(vecConvdb, sizeof(double), sizeb[beta], fpResult);
 	fclose(fpResult);
 }
 
