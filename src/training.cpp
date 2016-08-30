@@ -65,15 +65,17 @@ CTraining::CTraining(CDataread* pD)
 	sizePool = NULL;
 	automode = 'n';
 	W = NULL;
-	dLdW = NULL;
-	vecdW = NULL;
-	convW = NULL;
-	convdLdW = NULL;
 	b = NULL;
+	dLdW = NULL;
 	dLdb = NULL;
+	vecdW = NULL;
 	vecdb = NULL;
-	convb = NULL;
-	convdLdb = NULL;
+	ConvW = NULL;
+	Convb = NULL;
+	ConvdLdW = NULL;
+	ConvdLdb = NULL;
+	vecConvdW = NULL;
+	vecConvdb = NULL;
 	width = NULL;
 	height = NULL;
 	depth = NULL;
@@ -90,15 +92,17 @@ void CTraining::FreeMem()
 {
 	pData->FreeData();
 	if(W != NULL) free(W);
-	if(dLdW != NULL) free(dLdW);
-	if(vecdW != NULL) free(vecdW);
-	if(convW != NULL) free(convW);
-	if(convdLdW != NULL) free(convdLdW);
 	if(b != NULL) free(b);
+	if(dLdW != NULL) free(dLdW);
 	if(dLdb != NULL) free(dLdb);
+	if(vecdW != NULL) free(vecdW);
 	if(vecdb != NULL) free(vecdb);
-	if(convb != NULL) free(convb);
-	if(convdLdb != NULL) free(convdLdb);
+	if(ConvW != NULL) free(ConvW);
+	if(Convb != NULL) free(Convb);
+	if(ConvdLdW != NULL) free(ConvdLdW);
+	if(ConvdLdb != NULL) free(ConvdLdb);
+	if(vecConvdW != NULL) free(vecConvdW);
+	if(vecConvdb != NULL) free(vecConvdb);
 	if(width != NULL) free(width);
 	if(height != NULL) free(height);
 	if(depth != NULL) free(depth);
@@ -117,7 +121,7 @@ void CTraining::FreeMem()
 
 int CTraining::WeightInit(int size, char* argv)
 {
-	int i;
+	int i,j;
 	learningSize=size;
 	savefilename = argv;
 	printf("[(CONV -> ReLU) * 'A' -> POOL?] * 'B' -> (FC -> ReLU) * 'C' -> FC\n");
@@ -138,6 +142,9 @@ int CTraining::WeightInit(int size, char* argv)
 	width = (int*) malloc(sizeof(int) * (beta+1));
 	height = (int*) malloc(sizeof(int) * (beta+1));
 	depth = (int*) malloc(sizeof(int) * (beta+1));
+	F = (int*) malloc(sizeof(int) * beta);
+	S = (int*) malloc(sizeof(int) * beta);
+	P = (int*) malloc(sizeof(int) * beta);
 
 	width[0] = pData->row;
 	height[0] = pData->col;
@@ -196,7 +203,7 @@ int CTraining::WeightInit(int size, char* argv)
 				}
 				else printf("wrong sets...\n");
 			}
-			printf("input depth_%d\n>> ");
+			printf("input depth_%d\n>> ",i+1);
 			scanf("%d", &depth[i+1]);
 			getchar();
 		}
@@ -215,24 +222,44 @@ int CTraining::WeightInit(int size, char* argv)
 	
 	ParamAllocate();
 	
-	double U, V;
+	double U, V, sumW;
+	int numW;
 	U = (double) (RAND_MAX) / 2;
 	V = sqrt((double) ((double) RAND_MAX * (double) (RAND_MAX+1) *(double) (2*RAND_MAX + 1)) / 6);
 
 	srand(time(NULL));
 	// W^i : D_(i+1) x D_i
 	// b^i : D_(i+1)
-	double sumW=0;
 	for(i=0; i<sizeb[alpha]; i++) b[i] = 0.01;
-	for(i=0; i<sizeW[alpha]; i++)
-	{
-		W[i] = (double)rand();
-		sumW += W[i];
-	}
+	for(i=0; i<sizeConvb[beta]; i++) b[i] = 0.01;
 	// choose random number according to normal distribution
 	// and times sqrt(2/N)
-	for(i=0; i<sizeW[alpha]; i++)
-		W[i] = (sqrt(2) * (W[i] - U) * (sumW - (double) sizeW[alpha] * U)) / (V * sqrt(N));
+	for(i=0; i<alpha; i++)
+	{
+		sumW = 0;
+		numW = 0;
+		for(j=indexOfW(i,0,0); j<indexOfW(i+1,0,0); j++)
+		{
+			W[j] = (double)rand();
+			sumW += W[j];
+			numW++;
+		}
+		for(j=indexOfW(i,0,0); j<indexOfW(i+1,0,0); j++)
+			W[j] = (sqrt(2) * (W[j] - U) * (sumW - (double) sizeW[alpha] * U)) / (V * sqrt(numW));
+	}
+	for(i=0; i<beta; i++)
+	{
+		sumW = 0;
+		numW = 0;
+		for(j=indexOfConvW(i,0,0,0,0); j<indexOfConvW(i+1,0,0,0,0); j++)
+		{
+			ConvW[j] = (double)rand();
+			sumW += ConvW[j];
+			numW++;
+		}
+		for(j=indexOfConvW(i,0,0,0,0); j<indexOfConvW(i+1,0,0,0,0); j++)
+			ConvW[j] = (sqrt(2) * (ConvW[j] - U) * (sumW - (double) sizeW[alpha] * U)) / (V * sqrt(numW));
+	}
 				
 	return 0;
 }
@@ -333,11 +360,17 @@ int CTraining::WeightLoad(char* argv)
 		// scan W,b etc
 		fread(W, sizeof(double), sizeW[alpha], fpWeight);
 		fread(b, sizeof(double), sizeb[alpha], fpWeight);
+		fread(ConvW, sizeof(double), sizeW[beta], fpWeight);
+		fread(Convb, sizeof(double), sizeb[beta], fpWeight);
 		// scan gradients
 		fread(dLdW, sizeof(double), sizeW[alpha], fpWeight);
 		fread(dLdb, sizeof(double), sizeb[alpha], fpWeight);
 		fread(vecdW, sizeof(double), sizeW[alpha], fpWeight);
 		fread(vecdb, sizeof(double), sizeb[alpha], fpWeight);
+		fread(ConvdLdW, sizeof(double), sizeW[beta], fpWeight);
+		fread(ConvdLdb, sizeof(double), sizeb[beta], fpWeight);
+		fread(vecConvdW, sizeof(double), sizeW[beta], fpWeight);
+		fread(vecConvdb, sizeof(double), sizeb[beta], fpWeight);
 	}
 	else err = ERR_NOTSUPPORTEDVERSION;
 	
@@ -350,7 +383,6 @@ int CTraining::WeightLoad(char* argv)
 // return ERR_WRONGINDEX if index is out of its range
 int CTraining::indexOfW(int i, int j, int k)
 {
-	if(i>=alpha) return ERR_WRONGINDEXW;
 	if(j>=D[i+1]) return ERR_WRONGINDEXW;
 	if(k>=D[i]) return ERR_WRONGINDEXW;
 	
@@ -433,12 +465,11 @@ int CTraining::indexOfConvX(int u, int i, int j, int k)
 	int ans = height[u]*k + j;
 	ans *= width[u];
 	ans += i + sizeConvX[u];
-	
 	return ans;
 }
 
 // return sizeConvW[u] + F[u]*F[u]*depth[u]*v + F[u]*F[u]*k + F[u]*j + i
-int CTraining::indexOfconvW(int u, int v, int i, int j, int k)
+int CTraining::indexOfConvW(int u, int v, int i, int j, int k)
 {
 	int ans = depth[u] * v + k;
 	ans *= F[u];
@@ -448,7 +479,7 @@ int CTraining::indexOfconvW(int u, int v, int i, int j, int k)
 	return ans;
 }
 
-int CTraining::indexOfconvb(int u, int v)
+int CTraining::indexOfConvb(int u, int v)
 {
 	return sizeConvb[u] + v;
 }
@@ -460,21 +491,28 @@ int CTraining::indexOfPool(int m, int i, int j, int k)
 	ans = height[m]*k + j;
 	ans *= width[m];
 	ans += i + sizePool[t];
-	
 	return ans;
 }
 
-// return 0 if it is on zero-padding
-// or find the right X value
-double CTraining::XValueOfIndex(double *pt, int u, int i, int j, int k)
+int CTraining::indexOfConvdX(int u, int m, int i, int j, int k)
 {
-	if(i<P[u]) return 0;
-	if(j<P[u]) return 0;
-	if(i>=width[u]+P[u]) return 0;
-	if(j>=height[u]+P[u]) return 0;
-	
-	int ind = indexOfConvX(u, i-P[u], j-P[u], k);
-	return pt[ind];
+	int ans = u * sizeConvX[beta+1];
+	ans += indexOfConvX(m,i,j,k);
+	return ans;
+}
+
+int CTraining::indexOfConvdW(int u, int m, int v, int i, int j, int k)
+{
+	int ans = u * sizeConvW[beta];
+	ans += indexOfConvW(m,v,i,j,k);
+	return ans;
+}
+
+int CTraining::indexOfConvdb(int u, int m, int v)
+{
+	int ans = u * sizeConvb[beta];
+	ans += indexOfConvb(m,v);
+	return ans;
 }
 
 void CTraining::ParamAllocate()
@@ -531,10 +569,12 @@ void CTraining::ParamAllocate()
 	dLdb = (double*) malloc(sizeof(double) * sizeb[alpha]);
 	vecdW = (double*) malloc(sizeof(double) * sizeW[alpha]);
 	vecdb = (double*) malloc(sizeof(double) * sizeb[alpha]);
-	convW = (double*) malloc(sizeof(double) * sizeConvW[beta]);
-	convb = (double*) malloc(sizeof(double) * sizeConvb[beta]);
-	convdLdW = (double*) malloc(sizeof(double) * sizeConvW[beta]);
-	convdLdb = (double*) malloc(sizeof(double) * sizeConvb[beta]);
+	ConvW = (double*) malloc(sizeof(double) * sizeConvW[beta]);
+	Convb = (double*) malloc(sizeof(double) * sizeConvb[beta]);
+	ConvdLdW = (double*) malloc(sizeof(double) * sizeConvW[beta]);
+	ConvdLdb = (double*) malloc(sizeof(double) * sizeConvb[beta]);
+	vecConvdW = (double*) malloc(sizeof(double) * sizeConvW[beta]);
+	vecConvdb = (double*) malloc(sizeof(double) * sizeConvb[beta]);
 	
 	// initialize dL/db and dL/dW
 	for(i=0; i<sizeb[alpha]; i++)
@@ -546,6 +586,16 @@ void CTraining::ParamAllocate()
 	{
 		dLdW[i] = 0;
 		vecdW[i]=0;
+	}
+	for(i=0; i<sizeConvW[beta]; i++)
+	{
+		ConvdLdW[i] = 0;
+		vecConvdW[i] = 0;
+	}
+	for(i=0; i<sizeConvb[beta]; i++)
+	{
+		ConvdLdb[i] = 0;
+		vecConvdb[i] = 0;
 	}
 }
 
@@ -591,10 +641,10 @@ void CTraining::Training(int threads)
 			CudaResetGradients<<<sizeW[alpha], 1>>>(d_dLdW);
 			CudaResetGradients<<<sizeb[alpha], 1>>>(d_dLdb);
 #else
-			for(i=0; i<sizeW[alpha]; i++)
-				dLdW[i] = 0;
-			for(i=0; i<sizeb[alpha]; i++)
-				dLdb[i] = 0;
+			for(i=0; i<sizeW[alpha]; i++) dLdW[i] = 0;
+			for(i=0; i<sizeb[alpha]; i++) dLdb[i] = 0;
+			for(i=0; i<sizeConvW[beta]; i++) ConvdLdW[i] = 0;
+			for(i=0; i<sizeConvb[beta]; i++) ConvdLdb[i] = 0;
 #endif
 		}
 		loaded = 0;
@@ -692,7 +742,7 @@ void CTraining::Training(int threads)
 			// run multi-thread via cpu
 			if(cont)
 			{
-				for(i=0; i<threads && l+i<N; i++) hThread[i] = std::thread(&CTraining::FCThreadFunc, this, l+i);
+				for(i=0; i<threads && l+i<N; i++) hThread[i] = std::thread(&CTraining::CNNThreadFunc, this, l+i);
 				for(i=0; i<threads && l+i<N; i++) hThread[i].join();
 				l += threads;
 			}
@@ -727,6 +777,20 @@ void CTraining::Training(int threads)
 				dLdb[i] /= (double) N;
 				vecdb[i] = MOMENTUMUPDATE * vecdb[i] - H * dLdb[i];
 				b[i] += vecdb[i];
+			}
+			for(i=0; i<sizeConvW[beta]; i++)
+			{
+				ConvdLdW[i] /= (double) N;
+				ConvdLdW[i] += LAMBDA * ConvW[i];
+				L += LAMBDA * ConvW[i] * ConvW[i] * 0.5;
+				vecConvdW[i] = MOMENTUMUPDATE * vecConvdW[i] - H * ConvdLdW[i];
+				ConvW[i] += vecConvdW[i];
+			}
+			for(i=0; i<sizeConvb[beta]; i++)
+			{
+				ConvdLdb[i] /= (double) N;
+				vecConvdb[i] = MOMENTUMUPDATE * vecConvdb[i] - H * ConvdLdb[i];
+				Convb[i] += vecConvdb[i];
 			}
 			
 			// show loss func and its difference with previous one
@@ -832,6 +896,18 @@ void CTraining::Training(int threads)
 //			8byte double	vecdb[0]
 //				...
 //			8byte double	vecdb[sizeb[alpha]-1]
+//			8byte double	ConvdLdW[0]
+//				...
+//			8byte double	ConvdLdW[sizeW[alpha]-1]
+//			8byte double	ConvdLdb[0]
+//				...
+//			8byte double	ConvdLdb[sizeb[alpha]-1]
+//			8byte double	vecConvdW[0]
+//				...
+//			8byte double	vecConvdW[sizeW[alpha]-1]
+//			8byte double	vecConvdb[0]
+//				...
+//			8byte double	vecConvdb[sizeb[alpha]-1]
 void CTraining::FileSave()
 {
 	int i, j;
@@ -845,7 +921,9 @@ void CTraining::FileSave()
 	ver[1] = 2;
 	fwrite(magic, sizeof(char), 2, fpResult);
 	fwrite(ver, sizeof(int), 2, fpResult);
-	fwrite(&alpha, sizeof(int), 1, fpResult);
+	fwrite(&A, sizeof(int), 1, fpResult);
+	fwrite(&B, sizeof(int), 1, fpResult);
+	fwrite(&C, sizeof(int), 1, fpResult);
 	fwrite(D, sizeof(int), alpha+1, fpResult);
 	fwrite(&H, sizeof(double), 1, fpResult);
 	fwrite(&DELTA, sizeof(double), 1, fpResult);
@@ -858,6 +936,8 @@ void CTraining::FileSave()
 	fwrite(&Lold, sizeof(double), 1, fpResult);
 	fwrite(W, sizeof(double), sizeW[alpha], fpResult);
 	fwrite(b, sizeof(double), sizeb[alpha], fpResult);
+	fwrite(ConvW, sizeof(double), sizeConvW[beta], fpResult);
+	fwrite(Convb, sizeof(double), sizeConvb[beta], fpResult);
 	fwrite(dLdW, sizeof(double), sizeW[alpha], fpResult);
 	fwrite(dLdb, sizeof(double), sizeb[alpha], fpResult);
 	fwrite(vecdW, sizeof(double), sizeW[alpha], fpResult);
@@ -1068,11 +1148,11 @@ void CTraining::ShowHelp()
 	printf("enter h whenever you want to read this help message again...");
 }
 
-void CTraining::ConvThreadFunc(int index)
+void CTraining::CNNThreadFunc(int index)
 {
-	int m,i,j,k,i2,j2,k2,tmp;
+	int m,i,j,k,i2,j2,k2,I,J,u,tmp;
 	double *ConvX = (double*)malloc(sizeof(double) * sizeConvX[beta+1]);
-	bool *convReLU = (bool*)malloc(sizeof(bool) * sizeConvX[beta+1]);
+	bool *ConvReLU = (bool*)malloc(sizeof(bool) * sizeConvX[beta+1]);
 	int *Pooledi = (int*) malloc(sizeof(int) * sizePool[B]);
 	int *Pooledj = (int*) malloc(sizeof(int) * sizePool[B]);
 	double *ConvdX = (double*)malloc(sizeof(double) * D[alpha] * sizeConvX[beta+1]);
@@ -1083,6 +1163,12 @@ void CTraining::ConvThreadFunc(int index)
 	double* db = (double*) malloc(sizeof(double) * D[alpha] * sizeb[alpha]);
 	bool* ReLU = (bool*) malloc(sizeof(bool) * sizes[alpha+1]);
 	
+	if(!A && !B)
+	{
+		RNNThreadFunc(index);
+		return;
+	}
+	
 	// initialize
 	for(i=0; i<pData->D0; i++) ConvX[i] = pData->x[index][i];
 	
@@ -1091,41 +1177,41 @@ void CTraining::ConvThreadFunc(int index)
 	{
 		// Pooling layer
 		if((B>0) && !((m+1)%(A+1)))
-		for(i2=0; i2<width[m+1]; i2++)
-		for(j2=0; j2<height[m+1]; j2++)
+		for(i2=0; i2<width[m+1]; i2++){
+		for(j2=0; j2<height[m+1]; j2++){
 		for(k2=0; k2<depth[m+1]; k2++)
 		{
 			ConvX[indexOfConvX(m+1,i2,j2,k2)] = 0;
-			for(I=i2*S[m]; I<i2*S[m]+F[m]; I++)
-			for(J=j2*S[m]; J<j2*S[m]+F[m]; J++)
+			for(I=i2*S[m]; I<i2*S[m]+F[m]; I++){
+			for(J=j2*S[m]; J<j2*S[m]+F[m]; J++){
 			if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < ConvX[indexOfConvX(m,I,J,k2)])
 			{
 				ConvX[indexOfConvX(m+1,i2,j2,k2)] = ConvX[indexOfConvX(m,I,J,k2)];
-				Pooledi[indexofPool(m+1,i2,j2,k2)] = I;
-				Pooledj[indexofPool(m+1,i2,j2,k2)] = J;
-			}
-		}
+				Pooledi[indexOfPool(m+1,i2,j2,k2)] = I;
+				Pooledj[indexOfPool(m+1,i2,j2,k2)] = J;
+			}}}
+		}}}
 		
 		// Conv layer
 		else
-		for(i2=0; i2<width[m+1]; i2++)
-		for(j2=0; j2<height[m+1]; j2++)
+		for(i2=0; i2<width[m+1]; i2++){
+		for(j2=0; j2<height[m+1]; j2++){
 		for(k2=0; k2<depth[m+1]; k2++)
 		{
-			ConvX[indexOfConvX(m+1,i2,j2,k2)] = convb[indexOfconvb(m,k2)];
-			for(i=0; i<F[m]; i++)
-			for(j=0; j<F[m]; j++)
+			ConvX[indexOfConvX(m+1,i2,j2,k2)] = Convb[indexOfConvb(m,k2)];
+			for(i=0; i<F[m]; i++){
+			for(j=0; j<F[m]; j++){
 			for(k=0; k<depth[m]; k++)
 			{
 				I = i+i2*S[m]-P[m];
 				J = j+j2*S[m]-P[m];
 				if(I<0 || I>=width[m] || J<0 || J>=height[m]) continue;
-				if(ReLU[indexOfConvX(m,I,J,k)])
-					ConvX[indexOfConvX(m+1,i2,j2,k2)] += ConvX[indexOfConvX(m,I,J,k)] * convW[indexOfconvW(m,k2,i,j,k)];
-				if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < 0) convReLU[indexOfConvX(m+1,i2,j2,k2)] = 0;
-				else convReLU[indexOfConvX(m+1,i2,j2,k2)] = 1;
-			}
-		}
+				if(ConvReLU[indexOfConvX(m,I,J,k)])
+					ConvX[indexOfConvX(m+1,i2,j2,k2)] += ConvX[indexOfConvX(m,I,J,k)] * ConvW[indexOfConvW(m,k2,i,j,k)];
+				if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < 0) ConvReLU[indexOfConvX(m+1,i2,j2,k2)] = 0;
+				else ConvReLU[indexOfConvX(m+1,i2,j2,k2)] = 1;
+			}}}
+		}}}
 	}
 	// Conv & Pool layer ended
 	
@@ -1202,14 +1288,14 @@ void CTraining::ConvThreadFunc(int index)
 		}
 	}
 	
-	for(i=0; i<D[alpha] * sizeConvX[beta+1]; i++) convdX[i] = 0;
-	for(i=0; i<D[alpha] * sizeConvW[beta]; i++) convdW[i] = 0;
-	for(i=0; i<D[alpha] * sizeConvb[beta]; i++) convdb[i] = 0;
+	for(i=0; i<D[alpha] * sizeConvX[beta+1]; i++) ConvdX[i] = 0;
+	for(i=0; i<D[alpha] * sizeConvW[beta]; i++) ConvdW[i] = 0;
+	for(i=0; i<D[alpha] * sizeConvb[beta]; i++) Convdb[i] = 0;
 	// calculate initial gradient of convdX
 	for(u=0; u<D[alpha]; u++)
 	{
 		tmp = indexOfConvdX(beta, u, 0,0,0);
-		for(v=0; v<D[0]; v++)
+		for(int v=0; v<D[0]; v++)
 		{
 			if(ReLU[indexOfs(0,v)])
 			for(i=0; i<D[1]; i++)
@@ -1223,42 +1309,44 @@ void CTraining::ConvThreadFunc(int index)
 		// Pooling layer
 		if(B && !((m+1)%(A+1)))
 		{
-			for(I=0; I<width[m]; I++)
-			for(J=0; J<height[m]; j++)
+			for(I=0; I<width[m]; I++){
+			for(J=0; J<height[m]; j++){
 			for(k=0; k<depth[m]; k++)
 			{
-				for(i2=(int)(I-F[m])/S[m] + 1; i2<(int)I/S[m]; i2++)
-				for(j2=(int)(J-F[m])/S[m] + 1; j2<(int)J/S[m]; j2++)
-				if(I==Pooledi[indexOfPool(m+1,i2,j2,k)] && J==Pooledj[inidexOfPool(m+1,i2,j2,k)])
+				for(i2=(int)(I-F[m])/S[m] + 1; i2<(int)I/S[m]; i2++){
+				for(j2=(int)(J-F[m])/S[m] + 1; j2<(int)J/S[m]; j2++){
+				if(I==Pooledi[indexOfPool(m+1,i2,j2,k)] && J==Pooledj[indexOfPool(m+1,i2,j2,k)])
 				for(u=0; u<D[alpha]; u++)
 					ConvdX[indexOfConvdX(u,m,I,J,k)] += ConvdX[indexOfConvdX(u,m+1,i2,j2,k)];
-			}
+			}}}}}
 		}
 	
 		// Conv layer
 		else
 		{
-			for(i2=0; i2<width[m+1]; i2++)
-			for(j2=0; j2<height[m+1]; j2++)
+			for(i2=0; i2<width[m+1]; i2++){
+			for(j2=0; j2<height[m+1]; j2++){
 			for(k2=0; k2<depth[m+1]; k2++)
 			{
-				for(i=0; i<F[m]; i++)
-				for(j=0; j<F[m]; j++)
+				for(i=0; i<F[m]; i++){
+				for(j=0; j<F[m]; j++){
 				for(k=0; k<depth[m]; k++)
 				{
 					I = i+i2*S[m]-P[m];
 					J = j+j2*S[m]-P[m];
 					if(I<0 || I>=width[m] || J<0 || J>=height[m]) continue;
 					if(ConvReLU[indexOfConvX(m,I,J,k)])
+					for(u=0; u<D[alpha]; u++)
 					{
 						// ConvdX
 						ConvdX[indexOfConvdX(u,m,I,J,k)] += ConvdX[indexOfConvdX(u,m+1,i2,j2,k2)] * ConvW[indexOfConvW(m,k2,i,j,k)];
 						// ConvdW
 						ConvdW[indexOfConvdW(u,m,k2,i,j,k)] += ConvdX[indexOfConvdX(u,m+1,i2,j2,k2)] * ConvX[indexOfConvX(m,I,J,k)];
 					}
-				}
-				Convdb[indexOfConvdb(u,m,k2)] += ConvdX[indexOfConvdX(u,m+1,i2,j2,k2)];
-			}
+				}}}
+				for(u=0; u<D[alpha]; u++)
+					Convdb[indexOfConvdb(u,m,k2)] += ConvdX[indexOfConvdX(u,m+1,i2,j2,k2)];
+			}}}
 		}
 	}
 	
@@ -1299,7 +1387,7 @@ void CTraining::ConvThreadFunc(int index)
 	free(X);
 	free(ReLU);
 	free(ConvX);
-	free(convReLU);
+	free(ConvReLU);
 	free(Pooledi);
 	free(Pooledj);
 	free(ConvdX);
@@ -1307,7 +1395,7 @@ void CTraining::ConvThreadFunc(int index)
 	free(Convdb);
 }
 
-int CTraining::FCThreadFunc(int index)
+int CTraining::RNNThreadFunc(int index)
 {
 	int i,j,k,m,tmp;
 	// X^(i+1) = W^i * delta^i * X^i + b^i
