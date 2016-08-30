@@ -124,7 +124,7 @@ int CTraining::WeightInit(int size, char* argv)
 	int i,j;
 	learningSize=size;
 	savefilename = argv;
-	printf("[(CONV -> ReLU) * 'A' -> POOL?] * 'B' -> (FC -> ReLU) * 'C' -> FC\n");
+	printf("[(CONV -> ReLU) * A -> POOL?] * B -> (FC -> ReLU) * C -> FC\n");
 	printf("if B=0 : (CONV -> ReLU) * A -> (FC -> ReLU) * C -> FC\n");
 	printf("input A\n>> ");
 	scanf("%d", &A);

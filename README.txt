@@ -1,14 +1,14 @@
 # ProjectDeepLearning
 
 This Project is made of C++.
-And the purpose is to learn how deep learning mechanism works.
-Currently, it is based on MLP, using SVM loss function,
-and optimizes via momentum update.
-It doesn't support cuda yet.
-Next goal is to add convolutional layers
-and cuda supporting.
+And the purpose is to study how deep learning mechanism works.
+Currently, it is based on CNN,
+using SVM for loss function,
+and optimizes by momentum update.
+It doesn't support cuda yet,
+but it's able to run in multi-thread via CPU.
 
-==How to Use==
+======How to Use======
 
 0. Call "PDL.exe (saved file name)" in console to load previous file
    or call "PDL.exe" in console to start newly.
@@ -19,3 +19,20 @@ and cuda supporting.
 4. Choose hyperparameter to change its values or not.
 5. During training, you can input some commends (input h and enter for help)
 6. Input 'q' to end the program.
+
+======Hyperparameters======
+
+if B>0 : [(CONV -> ReLU) * A -> POOL?] * B -> (FC -> ReLU) * C -> FC
+if B=0 : (CONV -> ReLU) * A -> (FC -> ReLU) * C -> FC
+
+Every Conv and Pooling layer requires
+Filter(F), Stride(S), Zero-padding(P), and depth of the layer
+And every FC layer requires its Dimension(D) except final score layer.
+
+You must decide values of above hyperparameters.
+Below is a list of additional hyperparameters you can use.
+
+Delta is a hyperparameter used at SVM.
+Lambda is a hyperparameter used at L2 regularization.
+H is the learning rate.
+Momentum update constance is a hyperparameter used at optimization.
