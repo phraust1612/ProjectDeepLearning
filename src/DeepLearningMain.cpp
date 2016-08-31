@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include "training.h"
 #include "dataread.h"
-#define VERSION	2.1
+#define VERSION	2.2
 
 int main(int argc, char* argv[])
 {
