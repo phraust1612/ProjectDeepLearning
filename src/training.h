@@ -21,24 +21,43 @@
 class CTraining
 {
 private:
+	// saverfilename : Loaded file name string
+	// automode : holded command
 	char *savefilename, automode;
-	// alpha is the number of layers including hidden layers and the final score layer
+	// A,B,C,D,F,S,P are hyperparameters to decide Wieght's initial size
+	// please check out README file for more detail
+	// alpha is the number of FC layers including score layer
+	// beta is the number of Conv and Pooling layers
 	// N is the number of training sets
 	// and Nt is the number of test sets
-	// D is the dimension of each layer (D[0] becomes the dimension of input layer)
+	// loaded is 1 when it first loads file
+	// count is an index of nth learning
+	// l is an index of nth images
 	int A, B, C, *D, *F, *S, *P, alpha, beta, N, Nt, count, l, learningSize, loaded;
+	// each width, height, depth corresponds to nth layer's
+	// sizeX is the sum of X's size under nth X
 	int *width, *height, *depth, *sizeW, *sizeb, *sizes, *sizeConvX, *sizeConvW, *sizeConvb, *sizePool;
+	// W,b,ConvW,Convb are weight and bias parameters for each FC and Conv layers
 	// dW, db each stands for ds/dW, ds/db matrices
 	// dLdW, dLdb corresponds to dL/dW, dL/db
 	// vecdW, vecdb are used for momentum update
-	// olddLdW, olddLdb, oldvecdW, oldvecdb are used for gradient check
 	double *W, *b, *dLdW, *dLdb, *vecdW, *vecdb, *ConvW, *Convb, *ConvdLdW, *ConvdLdb, *vecConvdW, *vecConvdb;
-	// DELTA, LAMBDA, MOMENTUMUPDATE are hyperparameters
 	// L is loss function value, Lold is previous loss value
-	// H is the learning rate, which is also kind of hyperparameters
+	// other uppercase words are hyperparameters
+	// checkout README for more detail
 	double H, L, Lold, DELTA, LAMBDA, MOMENTUMUPDATE;
 	CDataread *pData;
+	// allocate memories for gradient and weights
 	void ParamAllocate();
+	// checkout README for range of each index
+	// W^i_j,k = W[indexOfW(i,j,k)]
+	// b^i,j = b[indexOfb(i,j)]
+	// X^i,j = X[indexOfs(i,j)]
+	// ds^alpha_i / dW^m_j,k = dW[indexOfdW(m,i,j,k)]
+	// ds^alpha_i / db^m_j = db[indexOfdb(m,i,j)]
+	// ConvX^m_i,j,k = ConvX[indexOfConvX(m,i,j,k)]
+	// ConvW^m,k2_i,j,k = ConvW[indexOfConvW(m,k2,i,j,k)]
+	// Convb^m_k2 = Convb[indexOfConvb(m,k2)]
 	int indexOfW(int i, int j, int k);
 	int indexOfb(int i, int j);
 	int indexOfs(int i, int j);
@@ -60,9 +79,9 @@ private:
 	cudaDeviceProp deviceProp;
 #endif
 public:
-	
 	CTraining(CDataread* pD);
 	~CTraining();
+	// one of WeightInit or WeightLoad must be called before Training starts
 	int WeightInit(int size, char* argv);
 	int WeightLoad(char* argv);
 	int WeightSave();

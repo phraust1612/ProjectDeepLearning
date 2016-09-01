@@ -37,7 +37,7 @@ Lambda is a hyperparameter used at L2 regularization.
 H is the learning rate.
 Momentum update constance is a hyperparameter used at optimization.
 
-============================Patch Notes===========================
+===========================Patch Notes===========================
 
 ver 2.2
    - Now it supports CNN, but Pooling layer doesn't work yet
