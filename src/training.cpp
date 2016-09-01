@@ -29,6 +29,7 @@ __global__ void CudaOptimization(double *d_grad, double *d_W, double H)
 }
 #endif
 
+// constructor : resets member parameters
 CTraining::CTraining(CDataread* pD)
 {
 	pData = pD;
@@ -86,8 +87,11 @@ CTraining::CTraining(CDataread* pD)
 	savefilename = NULL;
 }
 
+// destructor does nothing but please use FreeMem() instead
 CTraining::~CTraining(){}
 
+// free allocated memories
+// please call this after end Training() returns
 void CTraining::FreeMem()
 {
 	pData->FreeData();
@@ -119,6 +123,9 @@ void CTraining::FreeMem()
 	if(P != NULL) free(P);
 }
 
+
+// Set learning outline and initiate weights
+// each weight parameter gets random value following normal distribution
 int CTraining::WeightInit(int size, char* argv)
 {
 	int i,j;
