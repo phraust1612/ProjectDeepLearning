@@ -76,6 +76,9 @@ private:
 	int indexOfConvdW(int u, int m, int v, int i, int j, int k);
 	int indexOfConvdb(int u, int m, int v);
 	double GradientCheck();
+	int RNNThreadFunc(int index);
+	int CheckCNNAccuracy(int index);
+	int CheckRNNAccuracy(int index);
 	CKeyinter Key;
 #if CUDAEXIST
 #define CUDABLOCKS	1000
@@ -98,7 +101,6 @@ public:
 	void ShowHelp();
 	// callee function : run a training loop for given index'th imaage
 	// RNNThread is only called when both A and B are 0 from CNNThreadFunc
-	int RNNThreadFunc(int index);
 	void CNNThreadFunc(int index);
 	// call this function after whole training procedure is done to free memories
 	void FreeMem();
@@ -106,7 +108,6 @@ public:
 	// lPar isn't used yet
 	int SetHyperparam(ValidationParam validateMode, int lPar, double hyperparam);
 	// CheckAccuracy returns the accuracy of current weight parameters
-	double CheckAccuracy();
-	double CheckRNNAccuracy();
+	double CheckAccuracy(int threads);
 };
 #endif

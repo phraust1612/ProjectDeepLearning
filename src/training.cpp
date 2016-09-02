@@ -633,7 +633,6 @@ void CTraining::Training(int threads)
 	time_t starttime, endtime;
 	double gap, Try, acc, h;
 	bool cont = true;
-	std::thread hThread[threads];
 	// Callback function starts to catch key inputs
 	Key = CKeyinter();
 	Key.Start();
@@ -696,8 +695,8 @@ void CTraining::Training(int threads)
 					break;
 				case 'c':
 					printf("\nstart testing procedure...");
-					acc = CheckAccuracy();
 					Key.keysave = automode;
+					acc = CheckAccuracy(threads);
 					printf("\naccuracy : %2.2lf%%!!!", acc);
 					break;
 				case 'h':
@@ -751,12 +750,12 @@ void CTraining::Training(int threads)
 					if(automode != 'g') printf("\ngradient check mode...");
 					automode = 'g';
 					Key.keysave = automode;
-					break;
+					break;/*
 				case 'm':
 					if(automode != 'm') printf("\nmodify parameter mode...");
 					automode = 'm';
 					Key.keysave = automode;
-					break;
+					break;*/
 				default:
 					Key.keysave = automode;
 					break;
@@ -770,9 +769,11 @@ void CTraining::Training(int threads)
 			// run multi-thread via cpu
 			if(cont)
 			{
+				std::thread* hThread = new std::thread[threads];
 				for(i=0; i<threads && l+i<N; i++) hThread[i] = std::thread(&CTraining::CNNThreadFunc, this, l+i);
 				for(i=0; i<threads && l+i<N; i++) hThread[i].join();
 				l += threads;
+				delete [] hThread;
 			}
 #endif
 		}
@@ -834,7 +835,7 @@ void CTraining::Training(int threads)
 			{
 				Try = GradientCheck();
 				printf("\ngradient check : %lf...", Try);
-			}
+			}/*
 			if(automode == 'm')
 			{
 				Key.Stop();
@@ -856,7 +857,7 @@ void CTraining::Training(int threads)
 				Key.Start();
 				Key.keysave = 'n';
 				automode = 'n';
-			}
+			}*/
 			Lold = L;
 			L=0;
 #endif
@@ -1093,177 +1094,180 @@ double CTraining::GradientCheck()
 	return ans;
 }
 
-double CTraining::CheckAccuracy()
+double CTraining::CheckAccuracy(int threads)
 {
-	if(!A && !B) return CheckRNNAccuracy();
+	int t,i,tmp;
 	
-	int t,m,i,j,k,i2,j2,k2,I,J,u,tmp,correctnum,ans;
+	t = 0;	// t is an index for each picture
+	loaded = 0;	// number of how many images were correct
+	double proc;
+	// computing score function for each test images
+	while(t<Nt)
+	{
+		std::thread* hThr = new std::thread[threads];
+		
+		for(i=0; i<threads && t+i<Nt; i++)
+		{
+			if(!A && !B) hThr[i] = std::thread(&CTraining::CheckRNNAccuracy, this, t+i);
+			else hThr[i] = std::thread(&CTraining::CheckCNNAccuracy, this, t+i);
+		}
+		for(i=0; i<threads && t+i<Nt; i++) hThr[i].join();
+		t += threads;
+		delete [] hThr;
+		
+		proc = (double) 100 * t/Nt;
+		printf("%2.2lf%%\b\b\b\b\b",proc);
+		if(proc>9.995) printf("\b");
+		if(proc>=99.995) printf("\b");
+	}
+	printf("done...");
+	
+	proc = (double) (100*loaded)/Nt;
+	loaded = 0;
+	return proc;
+}
+
+int CTraining::CheckCNNAccuracy(int index)
+{
+	int m,i,j,k,i2,j2,k2,I,J,ans;
+	double highest;		// temporary score used for seeking highest score
 	double *ConvX = (double*)malloc(sizeof(double) * sizeConvX[beta+1]);
 	double* X = (double*) malloc(sizeof(double) * sizes[alpha+1]);
 	
-	correctnum = 0;	// number of how many images were correct
-	double highest;		// temporary score used for seeking highest score
-	double proc;
-	// computing score function for each test images
-	for(t=0; t<Nt; t++)	// t is an index for each picture
-	{
-		// initialize
-		for(i=0; i<pData->D0; i++)
-			ConvX[i] = pData->xt[t][i];
-		
-		// Conv and Pooling layer procedure
-		for(m=0; m<beta; m++)
-		{
-			// Pooling layer
-			if((B>0) && !((m+1)%(A+1)))
-			for(i2=0; i2<width[m+1]; i2++){
-			for(j2=0; j2<height[m+1]; j2++){
-			for(k2=0; k2<depth[m+1]; k2++)
-			{
-				ConvX[indexOfConvX(m+1,i2,j2,k2)] = 0;
-				for(I=i2*S[m]; I<i2*S[m]+F[m]; I++){
-				for(J=j2*S[m]; J<j2*S[m]+F[m]; J++){
-				if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < ConvX[indexOfConvX(m,I,J,k2)])
-				{
-					ConvX[indexOfConvX(m+1,i2,j2,k2)] = ConvX[indexOfConvX(m,I,J,k2)];
-				}}}
-			}}}
-			
-			// Conv layer
-			else
-			for(i2=0; i2<width[m+1]; i2++){
-			for(j2=0; j2<height[m+1]; j2++){
-			for(k2=0; k2<depth[m+1]; k2++)
-			{
-				ConvX[indexOfConvX(m+1,i2,j2,k2)] = Convb[indexOfConvb(m,k2)];
-				for(i=0; i<F[m]; i++){
-				for(j=0; j<F[m]; j++){
-				for(k=0; k<depth[m]; k++)
-				{
-					I = i+i2*S[m]-P[m];
-					J = j+j2*S[m]-P[m];
-					if(I<0 || I>=width[m] || J<0 || J>=height[m]) continue;
-						ConvX[indexOfConvX(m+1,i2,j2,k2)] += ConvX[indexOfConvX(m,I,J,k)] * ConvW[indexOfConvW(m,k2,i,j,k)];
-				}}}
-				if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < 0) ConvX[indexOfConvX(m+1,i2,j2,k2)] = 0;
-			}}}
-		}
-		// Conv & Pool layer ended
-		
-		i = indexOfConvW(beta,0,0,0,0);
-		for(j=0; j<D[0]; j++)
-			X[j] = ConvX[j+i];
-		
-		// this loop is a procedure of score function
-		for(i=0; i<C; i++)
-		{
-			for(j=0; j<D[i+1]; j++)
-			{
-				X[indexOfs(i+1,j)] = b[indexOfb(i,j)];
-				// X^(i+1) = W^i * ReLU^i * X^i + b^i
-				for(k=0; k<D[i]; k++)
-					X[indexOfs(i+1,j)] += W[indexOfW(i,j,k)] * X[indexOfs(i,k)];
-				//ReLU^i_j = 1 if X^i_j>0, 0 otherwise
-				if(X[indexOfs(i+1,j)] < 0) X[indexOfs(i+1,j)] = 0;
-			}
-		}
-		
-		for(j=0; j<D[alpha]; j++)
-		{
-			X[indexOfs(alpha,j)] = b[indexOfb(C,j)];
-			for(k=0; k<D[C]; k++)
-				X[indexOfs(alpha,j)] += W[indexOfW(C,j,k)] * X[indexOfs(C,k)];
-		}
-		
-		// compare with answer and calculate the accuracy
-		// firstly find t'th image's highest score and its label
-		ans=0;
-		highest=X[indexOfs(alpha,0)];
-		for(j=1; j<D[alpha]; j++)
-		{
-			if(X[indexOfs(alpha,j)] > highest)
-			{
-				ans = j;
-				highest = X[indexOfs(alpha,j)];
-			}
-		}
-		// accumulate count if ans is correct
-		if(ans == pData->yt[t]) correctnum++;
-		
-		proc = (double) 100 * t/Nt;
-		printf("%2.2lf%%\b\b\b\b\b",proc);
-		if(proc>9.995) printf("\b");
-		if(proc>=99.995) printf("\b");
-	}
-	printf("done...");
+	// initialize
+	for(i=0; i<pData->D0; i++)
+		ConvX[i] = pData->xt[index][i];
 	
+	// Conv and Pooling layer procedure
+	for(m=0; m<beta; m++)
+	{
+		// Pooling layer
+		if((B>0) && !((m+1)%(A+1)))
+		for(i2=0; i2<width[m+1]; i2++){
+		for(j2=0; j2<height[m+1]; j2++){
+		for(k2=0; k2<depth[m+1]; k2++)
+		{
+			ConvX[indexOfConvX(m+1,i2,j2,k2)] = 0;
+			for(I=i2*S[m]; I<i2*S[m]+F[m]; I++){
+			for(J=j2*S[m]; J<j2*S[m]+F[m]; J++){
+			if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < ConvX[indexOfConvX(m,I,J,k2)])
+			{
+				ConvX[indexOfConvX(m+1,i2,j2,k2)] = ConvX[indexOfConvX(m,I,J,k2)];
+			}}}
+		}}}
+		
+		// Conv layer
+		else
+		for(i2=0; i2<width[m+1]; i2++){
+		for(j2=0; j2<height[m+1]; j2++){
+		for(k2=0; k2<depth[m+1]; k2++)
+		{
+			ConvX[indexOfConvX(m+1,i2,j2,k2)] = Convb[indexOfConvb(m,k2)];
+			for(i=0; i<F[m]; i++){
+			for(j=0; j<F[m]; j++){
+			for(k=0; k<depth[m]; k++)
+			{
+				I = i+i2*S[m]-P[m];
+				J = j+j2*S[m]-P[m];
+				if(I<0 || I>=width[m] || J<0 || J>=height[m]) continue;
+					ConvX[indexOfConvX(m+1,i2,j2,k2)] += ConvX[indexOfConvX(m,I,J,k)] * ConvW[indexOfConvW(m,k2,i,j,k)];
+			}}}
+			if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < 0) ConvX[indexOfConvX(m+1,i2,j2,k2)] = 0;
+		}}}
+	}
+	// Conv & Pool layer ended
+	
+	i = indexOfConvW(beta,0,0,0,0);
+	for(j=0; j<D[0]; j++)
+		X[j] = ConvX[j+i];
+	
+	// this loop is a procedure of score function
+	for(i=0; i<C; i++)
+	{
+		for(j=0; j<D[i+1]; j++)
+		{
+			X[indexOfs(i+1,j)] = b[indexOfb(i,j)];
+			// X^(i+1) = W^i * ReLU^i * X^i + b^i
+			for(k=0; k<D[i]; k++)
+				X[indexOfs(i+1,j)] += W[indexOfW(i,j,k)] * X[indexOfs(i,k)];
+			//ReLU^i_j = 1 if X^i_j>0, 0 otherwise
+			if(X[indexOfs(i+1,j)] < 0) X[indexOfs(i+1,j)] = 0;
+		}
+	}
+	
+	for(j=0; j<D[alpha]; j++)
+	{
+		X[indexOfs(alpha,j)] = b[indexOfb(C,j)];
+		for(k=0; k<D[C]; k++)
+			X[indexOfs(alpha,j)] += W[indexOfW(C,j,k)] * X[indexOfs(C,k)];
+	}
+	
+	// compare with answer and calculate the accuracy
+	// firstly find index'th image's highest score and its label
+	ans=0;
+	highest=X[indexOfs(alpha,0)];
+	for(j=1; j<D[alpha]; j++)
+	{
+		if(X[indexOfs(alpha,j)] > highest)
+		{
+			ans = j;
+			highest = X[indexOfs(alpha,j)];
+		}
+	}
 	free(X);
 	free(ConvX);
-	highest = (double) (100*correctnum)/Nt;
-	return highest;
+	
+	if(ans == pData->yt[index]) loaded++;
+	return 0;
 }
 
-double CTraining::CheckRNNAccuracy()
+int CTraining::CheckRNNAccuracy(int index)
 {
-	int t,i,j,k,tmp,correctnum,ans;
+	int i,j,k,ans;
+	double highest;		// temporary score used for seeking highest score
 	double* X = (double*) malloc(sizeof(double) * sizes[alpha+1]);
 	
-	correctnum = 0;	// number of how many images were correct
-	double highest;		// temporary score used for seeking highest score
-	double proc;
-	// computing score function for each test images
-	for(t=0; t<Nt; t++)	// t is an index for each picture
+	// initialize
+	for(i=0; i<pData->D0; i++)
+		X[i] = pData->xt[index][i];
+	
+	// this loop is a procedure of score function
+	for(i=0; i<C; i++)
 	{
-		// initialize
-		for(i=0; i<pData->D0; i++)
-			X[i] = pData->xt[t][i];
-		
-		// this loop is a procedure of score function
-		for(i=0; i<C; i++)
+		for(j=0; j<D[i+1]; j++)
 		{
-			for(j=0; j<D[i+1]; j++)
-			{
-				X[indexOfs(i+1,j)] = b[indexOfb(i,j)];
-				// X^(i+1) = W^i * ReLU^i * X^i + b^i
-				for(k=0; k<D[i]; k++)
-					X[indexOfs(i+1,j)] += W[indexOfW(i,j,k)] * X[indexOfs(i,k)];
-				//ReLU^i_j = 1 if X^i_j>0, 0 otherwise
-				if(X[indexOfs(i+1,j)] < 0) X[indexOfs(i+1,j)] = 0;
-			}
+			X[indexOfs(i+1,j)] = b[indexOfb(i,j)];
+			// X^(i+1) = W^i * ReLU^i * X^i + b^i
+			for(k=0; k<D[i]; k++)
+				X[indexOfs(i+1,j)] += W[indexOfW(i,j,k)] * X[indexOfs(i,k)];
+			//ReLU^i_j = 1 if X^i_j>0, 0 otherwise
+			if(X[indexOfs(i+1,j)] < 0) X[indexOfs(i+1,j)] = 0;
 		}
-		
-		for(j=0; j<D[alpha]; j++)
-		{
-			X[indexOfs(alpha,j)] = b[indexOfb(C,j)];
-			for(k=0; k<D[C]; k++)
-				X[indexOfs(alpha,j)] += W[indexOfW(C,j,k)] * X[indexOfs(C,k)];
-		}
-		
-		// compare with answer and calculate the accuracy
-		// firstly find t'th image's highest score and its label
-		ans=0;
-		highest=X[indexOfs(alpha,0)];
-		for(j=1; j<D[alpha]; j++)
-		{
-			if(X[indexOfs(alpha,j)] > highest)
-			{
-				ans = j;
-				highest = X[indexOfs(alpha,j)];
-			}
-		}
-		// accumulate count if ans is correct
-		if(ans == pData->yt[t]) correctnum++;
-		
-		proc = (double) 100 * t/Nt;
-		printf("%2.2lf%%\b\b\b\b\b",proc);
-		if(proc>9.995) printf("\b");
-		if(proc>=99.995) printf("\b");
 	}
-	printf("done...");
+	
+	for(j=0; j<D[alpha]; j++)
+	{
+		X[indexOfs(alpha,j)] = b[indexOfb(C,j)];
+		for(k=0; k<D[C]; k++)
+			X[indexOfs(alpha,j)] += W[indexOfW(C,j,k)] * X[indexOfs(C,k)];
+	}
+	
+	// compare with answer and calculate the accuracy
+	// firstly find index'th image's highest score and its label
+	ans=0;
+	highest=X[indexOfs(alpha,0)];
+	for(j=1; j<D[alpha]; j++)
+	{
+		if(X[indexOfs(alpha,j)] > highest)
+		{
+			ans = j;
+			highest = X[indexOfs(alpha,j)];
+		}
+	}
 	
 	free(X);
-	highest = (double) (100*correctnum)/Nt;
-	return highest;
+	if(ans == pData->yt[index]) loaded++;
+	return 0;
 }
 
 int CTraining::SetHyperparam(ValidationParam validateMode, int lPar, double hyperparam)
