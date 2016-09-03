@@ -46,3 +46,9 @@ ver 2.2
    - Still has a mathematical error in gradient checking
    - WeightSave should be fixed properly on the basis of Conv weights
    - Modifying command should be fixed.
+
+ver 2.2.1
+   - CheckAccuracy function now supports multi-threading
+     but it occurs an error when it's RNN
+   - Testindex function is newly added
+     I checked there's no matter with indexing functions
