@@ -77,8 +77,8 @@ private:
 	int indexOfConvdb(int u, int m, int v);
 	double GradientCheck();
 	int RNNThreadFunc(int index);
-	int CheckCNNAccuracy(int index);
-	int CheckRNNAccuracy(int index);
+	// callee function runs on a thread, called from CheckAccuracy func
+	int CheckThreadFunc(int index);
 	CKeyinter Key;
 #if CUDAEXIST
 #define CUDABLOCKS	1000

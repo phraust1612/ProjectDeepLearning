@@ -1107,10 +1107,7 @@ double CTraining::CheckAccuracy(int threads)
 		std::thread* hThr = new std::thread[threads];
 		
 		for(i=0; i<threads && t+i<Nt; i++)
-		{
-			if(!A && !B) hThr[i] = std::thread(&CTraining::CheckRNNAccuracy, this, t+i);
-			else hThr[i] = std::thread(&CTraining::CheckCNNAccuracy, this, t+i);
-		}
+			hThr[i] = std::thread(&CTraining::CheckThreadFunc, this, t+i);
 		for(i=0; i<threads && t+i<Nt; i++) hThr[i].join();
 		t += threads;
 		delete [] hThr;
@@ -1127,61 +1124,72 @@ double CTraining::CheckAccuracy(int threads)
 	return proc;
 }
 
-int CTraining::CheckCNNAccuracy(int index)
+int CTraining::CheckThreadFunc(int index)
 {
 	int m,i,j,k,i2,j2,k2,I,J,ans;
 	double highest;		// temporary score used for seeking highest score
-	double *ConvX = (double*)malloc(sizeof(double) * sizeConvX[beta+1]);
 	double* X = (double*) malloc(sizeof(double) * sizes[alpha+1]);
 	
-	// initialize
-	for(i=0; i<pData->D0; i++)
-		ConvX[i] = pData->xt[index][i];
-	
-	// Conv and Pooling layer procedure
-	for(m=0; m<beta; m++)
+	// For CNN case
+	if(A)
 	{
-		// Pooling layer
-		if((B>0) && !((m+1)%(A+1)))
-		for(i2=0; i2<width[m+1]; i2++){
-		for(j2=0; j2<height[m+1]; j2++){
-		for(k2=0; k2<depth[m+1]; k2++)
-		{
-			ConvX[indexOfConvX(m+1,i2,j2,k2)] = 0;
-			for(I=i2*S[m]; I<i2*S[m]+F[m]; I++){
-			for(J=j2*S[m]; J<j2*S[m]+F[m]; J++){
-			if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < ConvX[indexOfConvX(m,I,J,k2)])
-			{
-				ConvX[indexOfConvX(m+1,i2,j2,k2)] = ConvX[indexOfConvX(m,I,J,k2)];
-			}}}
-		}}}
+		double *ConvX = (double*)malloc(sizeof(double) * sizeConvX[beta+1]);
+		// initialize
+		for(i=0; i<pData->D0; i++)
+			ConvX[i] = pData->xt[index][i];
 		
-		// Conv layer
-		else
-		for(i2=0; i2<width[m+1]; i2++){
-		for(j2=0; j2<height[m+1]; j2++){
-		for(k2=0; k2<depth[m+1]; k2++)
+		// Conv and Pooling layer procedure
+		for(m=0; m<beta; m++)
 		{
-			ConvX[indexOfConvX(m+1,i2,j2,k2)] = Convb[indexOfConvb(m,k2)];
-			for(i=0; i<F[m]; i++){
-			for(j=0; j<F[m]; j++){
-			for(k=0; k<depth[m]; k++)
+			// Pooling layer
+			if((B>0) && !((m+1)%(A+1)))
+			for(i2=0; i2<width[m+1]; i2++){
+			for(j2=0; j2<height[m+1]; j2++){
+			for(k2=0; k2<depth[m+1]; k2++)
 			{
-				I = i+i2*S[m]-P[m];
-				J = j+j2*S[m]-P[m];
-				if(I<0 || I>=width[m] || J<0 || J>=height[m]) continue;
-					ConvX[indexOfConvX(m+1,i2,j2,k2)] += ConvX[indexOfConvX(m,I,J,k)] * ConvW[indexOfConvW(m,k2,i,j,k)];
+				ConvX[indexOfConvX(m+1,i2,j2,k2)] = 0;
+				for(I=i2*S[m]; I<i2*S[m]+F[m]; I++){
+				for(J=j2*S[m]; J<j2*S[m]+F[m]; J++){
+				if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < ConvX[indexOfConvX(m,I,J,k2)])
+				{
+					ConvX[indexOfConvX(m+1,i2,j2,k2)] = ConvX[indexOfConvX(m,I,J,k2)];
+				}}}
 			}}}
-			if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < 0) ConvX[indexOfConvX(m+1,i2,j2,k2)] = 0;
-		}}}
+			
+			// Conv layer
+			else
+			for(i2=0; i2<width[m+1]; i2++){
+			for(j2=0; j2<height[m+1]; j2++){
+			for(k2=0; k2<depth[m+1]; k2++)
+			{
+				ConvX[indexOfConvX(m+1,i2,j2,k2)] = Convb[indexOfConvb(m,k2)];
+				for(i=0; i<F[m]; i++){
+				for(j=0; j<F[m]; j++){
+				for(k=0; k<depth[m]; k++)
+				{
+					I = i+i2*S[m]-P[m];
+					J = j+j2*S[m]-P[m];
+					if(I<0 || I>=width[m] || J<0 || J>=height[m]) continue;
+						ConvX[indexOfConvX(m+1,i2,j2,k2)] += ConvX[indexOfConvX(m,I,J,k)] * ConvW[indexOfConvW(m,k2,i,j,k)];
+				}}}
+				if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < 0) ConvX[indexOfConvX(m+1,i2,j2,k2)] = 0;
+			}}}
+		}
+		// Conv & Pool layer ended
+		
+		i = indexOfConvW(beta,0,0,0,0);
+		for(j=0; j<D[0]; j++)
+			X[j] = ConvX[j+i];
+		free(ConvX);
 	}
-	// Conv & Pool layer ended
+	// RNN init
+	else
+	{
+		for(i=0; i<pData->D0; i++)
+			X[i] = pData->xt[index][i];
+	}
 	
-	i = indexOfConvW(beta,0,0,0,0);
-	for(j=0; j<D[0]; j++)
-		X[j] = ConvX[j+i];
-	
-	// this loop is a procedure of score function
+	// FC layers
 	for(i=0; i<C; i++)
 	{
 		for(j=0; j<D[i+1]; j++)
@@ -1215,57 +1223,7 @@ int CTraining::CheckCNNAccuracy(int index)
 		}
 	}
 	free(X);
-	free(ConvX);
 	
-	if(ans == pData->yt[index]) loaded++;
-	return 0;
-}
-
-int CTraining::CheckRNNAccuracy(int index)
-{
-	int i,j,k,ans;
-	double highest;		// temporary score used for seeking highest score
-	double* X = (double*) malloc(sizeof(double) * sizes[alpha+1]);
-	
-	// initialize
-	for(i=0; i<pData->D0; i++)
-		X[i] = pData->xt[index][i];
-	
-	// this loop is a procedure of score function
-	for(i=0; i<C; i++)
-	{
-		for(j=0; j<D[i+1]; j++)
-		{
-			X[indexOfs(i+1,j)] = b[indexOfb(i,j)];
-			// X^(i+1) = W^i * ReLU^i * X^i + b^i
-			for(k=0; k<D[i]; k++)
-				X[indexOfs(i+1,j)] += W[indexOfW(i,j,k)] * X[indexOfs(i,k)];
-			//ReLU^i_j = 1 if X^i_j>0, 0 otherwise
-			if(X[indexOfs(i+1,j)] < 0) X[indexOfs(i+1,j)] = 0;
-		}
-	}
-	
-	for(j=0; j<D[alpha]; j++)
-	{
-		X[indexOfs(alpha,j)] = b[indexOfb(C,j)];
-		for(k=0; k<D[C]; k++)
-			X[indexOfs(alpha,j)] += W[indexOfW(C,j,k)] * X[indexOfs(C,k)];
-	}
-	
-	// compare with answer and calculate the accuracy
-	// firstly find index'th image's highest score and its label
-	ans=0;
-	highest=X[indexOfs(alpha,0)];
-	for(j=1; j<D[alpha]; j++)
-	{
-		if(X[indexOfs(alpha,j)] > highest)
-		{
-			ans = j;
-			highest = X[indexOfs(alpha,j)];
-		}
-	}
-	
-	free(X);
 	if(ans == pData->yt[index]) loaded++;
 	return 0;
 }
