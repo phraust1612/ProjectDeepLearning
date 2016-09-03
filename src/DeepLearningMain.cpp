@@ -128,7 +128,10 @@ int main(int argc, char* argv[])
 			return err;
 		}
 	}
-	
+	/* use this to check if there's wrong index function
+	hTrain.Testindex();
+	system("pause");
+	*/
 	// step 6 : choose how many threads you're gonna use
 	printf("how many threads do you want to set?\n>> ");
 	scanf("%d", &tmp);

@@ -109,5 +109,7 @@ public:
 	int SetHyperparam(ValidationParam validateMode, int lPar, double hyperparam);
 	// CheckAccuracy returns the accuracy of current weight parameters
 	double CheckAccuracy(int threads);
+	// Just a function checking if there is an error of indexing function
+	int Testindex();
 };
 #endif

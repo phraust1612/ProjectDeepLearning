@@ -1632,3 +1632,94 @@ int CTraining::RNNThreadFunc(int index)
 	
 	return 0;
 }
+
+int CTraining::Testindex()
+{
+	int m,i,j,k,u,i2,j2,k2,I,J,tmp,v;
+	int *ConvX = (int*)malloc(sizeof(int) * sizeConvX[beta+1]);
+	int *Pooledi = (int*) malloc(sizeof(int) * sizePool[B]);
+	int *Pooledj = (int*) malloc(sizeof(int) * sizePool[B]);
+	int *ConvdX = (int*)malloc(sizeof(int) * D[alpha] * sizeConvX[beta+1]);
+	int *ConvdW = (int*)malloc(sizeof(int) * D[alpha] * sizeConvW[beta]);
+	int *Convdb = (int*)malloc(sizeof(int) * D[alpha] * sizeConvb[beta]);
+	
+	for(i=0; i<sizeConvX[beta+1]; i++) ConvX[i] = 0;
+	for(i=0; i<sizePool[beta]; i++) Pooledi[i] = 0;
+	for(i=0; i<sizePool[beta]; i++) Pooledj[i] = 0;
+	for(i=0; i<D[alpha] * sizeConvX[beta+1]; i++) ConvdX[i] = 0;
+	for(i=0; i<D[alpha] * sizeConvW[beta]; i++) ConvdW[i] = 0;
+	for(i=0; i<D[alpha] * sizeConvb[beta]; i++) Convdb[i] = 0;
+	printf("done1..\n");
+	
+	for(i=0; i<pData->D0; i++)
+	{
+		ConvX[i]++;
+	}
+	printf("done2..\n");
+	
+	// Conv and Pooling layer procedure
+	for(m=0; m<beta; m++)
+	{
+		for(i2=0; i2<width[m+1]; i2++){
+		for(j2=0; j2<height[m+1]; j2++){
+		for(k2=0; k2<depth[m+1]; k2++)
+		{
+			ConvX[indexOfConvX(m+1,i2,j2,k2)]++;
+		}}}
+	}
+	printf("done3..\n");
+	
+	for(u=0; u<D[alpha]; u++)
+	{
+		tmp = indexOfConvdX(u,beta,0,0,0);
+		for(int v=0; v<D[0]; v++)
+		{
+			ConvdX[tmp+v]++;
+		}
+	}
+	printf("done4..\n");
+	
+	for(m=beta-1; m>=0; m--)
+	{
+		for(I=0; I<width[m]; I++){
+		for(J=0; J<height[m]; J++){
+		for(k=0; k<depth[m]; k++){
+		for(u=0; u<D[alpha]; u++)
+		{
+			ConvdX[indexOfConvdX(u,m,I,J,k)]++;
+		}}}}
+		for(k2=0; k2<depth[m+1]; k2++)
+		{
+			for(i=0; i<F[m]; i++){
+			for(j=0; j<F[m]; j++){
+			for(k=0; k<depth[m]; k++)
+			{
+				for(u=0; u<D[alpha]; u++)
+				{
+					ConvdW[indexOfConvdW(u,m,k2,i,j,k)]++;
+				}
+			}}}
+			for(u=0; u<D[alpha]; u++)
+				Convdb[indexOfConvdb(u,m,k2)]++;
+		}
+	}
+	printf("done5..\n");
+	for(i=0; i<D[alpha] * sizeConvX[beta+1]; i++)
+		if(ConvdX[i] != 1) printf("ConvdX %d - %d\n",i,ConvdX[i]);
+	for(i=0; i<D[alpha] * sizeConvW[beta]; i++)
+		if(ConvdW[i] != 1) printf("ConvdW %d - %d\n",i,ConvdW[i]);
+	for(i=0; i<D[alpha] * sizeConvb[beta]; i++)
+		if(Convdb[i] != 1) printf("Convdb %d - %d\n",i,Convdb[i]);
+	for(i=0; i<sizeConvX[beta+1]; i++)
+		if(ConvX[i] != 1) printf("ConvX %d - %d\n",i,ConvX[i]);
+	printf("done6...\n");
+	
+	free(ConvX);
+	free(Pooledi);
+	free(Pooledj);
+	free(ConvdX);
+	free(ConvdW);
+	free(Convdb);
+	
+	return 0;
+}
