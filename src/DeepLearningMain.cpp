@@ -83,12 +83,13 @@ int main(int argc, char* argv[])
 	
 	if(err == EXC_TRAININGDONE)
 	{
-		printf("training proc's already done, check accuracy and end?\n>> ");
+		printf("training proc's already done\ninput positive number to check accuracy and end\ninput 0 to keep training\n>> ");
 		scanf("%d", &tmp);
 		getchar();
 		if(tmp)
 		{
-			Try = hTrain.CheckAccuracy();
+			printf("start testing procedure...");
+			Try = hTrain.CheckAccuracy(1);
 			printf("accuracy : %2.2lf%%!\n", Try);
 			system("pause");
 			return err;
@@ -127,7 +128,10 @@ int main(int argc, char* argv[])
 			return err;
 		}
 	}
-	
+	/* use this to check if there's wrong index function
+	hTrain.Testindex();
+	system("pause");
+	*/
 	// step 6 : choose how many threads you're gonna use
 	printf("how many threads do you want to set?\n>> ");
 	scanf("%d", &tmp);
