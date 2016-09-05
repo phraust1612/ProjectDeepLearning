@@ -76,7 +76,6 @@ private:
 	int indexOfConvdW(int u, int m, int v, int i, int j, int k);
 	int indexOfConvdb(int u, int m, int v);
 	double GradientCheck();
-	int RNNThreadFunc(int index);
 	// callee function runs on a thread, called from CheckAccuracy func
 	int CheckThreadFunc(int index);
 	CKeyinter Key;
@@ -100,7 +99,6 @@ public:
 	void FileSave();
 	void ShowHelp();
 	// callee function : run a training loop for given index'th imaage
-	// RNNThread is only called when both A and B are 0 from CNNThreadFunc
 	void CNNThreadFunc(int index);
 	// call this function after whole training procedure is done to free memories
 	void FreeMem();

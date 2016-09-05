@@ -1281,80 +1281,87 @@ void CTraining::CNNThreadFunc(int index)
 	double* db = (double*) malloc(sizeof(double) * D[alpha] * sizeb[alpha]);
 	bool* ReLU = (bool*) malloc(sizeof(bool) * sizes[alpha+1]);
 	
-	if(!A && !B)
+	// for the case of CNN
+	if(A)
 	{
-		RNNThreadFunc(index);
-		return;
-	}
-	
-	// initialize
-	for(i=0; i<pData->D0; i++)
-	{
-		ConvX[i] = pData->x[index][i];
-		ConvReLU[i] = 1;
-	}
-	
-	// Conv and Pooling layer procedure
-	for(m=0; m<beta; m++)
-	{
-		// Pooling layer
-		if((B>0) && !((m+1)%(A+1)))
-		for(i2=0; i2<width[m+1]; i2++){
-		for(j2=0; j2<height[m+1]; j2++){
-		for(k2=0; k2<depth[m+1]; k2++)
+		// initialize CNN
+		for(i=0; i<pData->D0; i++)
 		{
-			ConvX[indexOfConvX(m+1,i2,j2,k2)] = 0;
-			for(I=i2*S[m]; I<i2*S[m]+F[m]; I++){
-			for(J=j2*S[m]; J<j2*S[m]+F[m]; J++){
-			if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < ConvX[indexOfConvX(m,I,J,k2)])
-			{
-				ConvX[indexOfConvX(m+1,i2,j2,k2)] = ConvX[indexOfConvX(m,I,J,k2)];
-				Pooledi[indexOfPool(m+1,i2,j2,k2)] = I;
-				Pooledj[indexOfPool(m+1,i2,j2,k2)] = J;
-			}}}
-		}}}
+			ConvX[i] = pData->x[index][i];
+			ConvReLU[i] = 1;
+		}
 		
-		// Conv layer
-		else
-		for(i2=0; i2<width[m+1]; i2++){
-		for(j2=0; j2<height[m+1]; j2++){
-		for(k2=0; k2<depth[m+1]; k2++)
+		// Conv and Pooling layer procedure
+		for(m=0; m<beta; m++)
 		{
-			ConvX[indexOfConvX(m+1,i2,j2,k2)] = Convb[indexOfConvb(m,k2)];
-			for(i=0; i<F[m]; i++){
-			for(j=0; j<F[m]; j++){
-			for(k=0; k<depth[m]; k++)
+			// Pooling layer
+			if((B>0) && !((m+1)%(A+1)))
+			for(i2=0; i2<width[m+1]; i2++){
+			for(j2=0; j2<height[m+1]; j2++){
+			for(k2=0; k2<depth[m+1]; k2++)
 			{
-				I = i+i2*S[m]-P[m];
-				J = j+j2*S[m]-P[m];
-				if(I<0 || I>=width[m] || J<0 || J>=height[m]) continue;
-				if(ConvReLU[indexOfConvX(m,I,J,k)])
-					ConvX[indexOfConvX(m+1,i2,j2,k2)] += ConvX[indexOfConvX(m,I,J,k)] * ConvW[indexOfConvW(m,k2,i,j,k)];
+				ConvX[indexOfConvX(m+1,i2,j2,k2)] = 0;
+				for(I=i2*S[m]; I<i2*S[m]+F[m]; I++){
+				for(J=j2*S[m]; J<j2*S[m]+F[m]; J++){
+				if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < ConvX[indexOfConvX(m,I,J,k2)])
+				{
+					ConvX[indexOfConvX(m+1,i2,j2,k2)] = ConvX[indexOfConvX(m,I,J,k2)];
+					Pooledi[indexOfPool(m+1,i2,j2,k2)] = I;
+					Pooledj[indexOfPool(m+1,i2,j2,k2)] = J;
+				}}}
 			}}}
-			if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < 0) ConvReLU[indexOfConvX(m+1,i2,j2,k2)] = 0;
-			else ConvReLU[indexOfConvX(m+1,i2,j2,k2)] = 1;
-		}}}
+			
+			// Conv layer
+			else
+			for(i2=0; i2<width[m+1]; i2++){
+			for(j2=0; j2<height[m+1]; j2++){
+			for(k2=0; k2<depth[m+1]; k2++)
+			{
+				ConvX[indexOfConvX(m+1,i2,j2,k2)] = Convb[indexOfConvb(m,k2)];
+				for(i=0; i<F[m]; i++){
+				for(j=0; j<F[m]; j++){
+				for(k=0; k<depth[m]; k++)
+				{
+					I = i+i2*S[m]-P[m];
+					J = j+j2*S[m]-P[m];
+					if(I<0 || I>=width[m] || J<0 || J>=height[m]) continue;
+					if(ConvReLU[indexOfConvX(m,I,J,k)])
+						ConvX[indexOfConvX(m+1,i2,j2,k2)] += ConvX[indexOfConvX(m,I,J,k)] * ConvW[indexOfConvW(m,k2,i,j,k)];
+				}}}
+				if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < 0) ConvReLU[indexOfConvX(m+1,i2,j2,k2)] = 0;
+				else ConvReLU[indexOfConvX(m+1,i2,j2,k2)] = 1;
+			}}}
+		}
+		// Conv & Pool layer ended
+		// initiate FC layer
+		i = indexOfConvW(beta,0,0,0,0);
+		for(j=0; j<D[0]; j++)
+		{
+			X[j] = ConvX[j+i];
+			ReLU[j] = ConvReLU[j+i];
+		}
 	}
-	// Conv & Pool layer ended
-	
-	i = indexOfConvW(beta,0,0,0,0);
-	for(j=0; j<D[0]; j++)
+	// initiate FC layer for the case of RNN
+	else
 	{
-		X[j] = ConvX[j+i];
-		ReLU[j] = ConvReLU[j+i];
+		for(j=0; j<D[0]; j++)
+		{
+			X[j] = pData->x[index][j];
+			ReLU[j] = 1;
+		}
 	}
 	
-	// this loop is a procedure of score function
+	// FC -> ReLU
 	for(i=0; i<C; i++)
 	{
 		for(j=0; j<D[i+1]; j++)
 		{
+			// FC : X^(i+1) = W^i * ReLU^i * X^i + b^i
 			X[indexOfs(i+1,j)] = b[indexOfb(i,j)];
-			// X^(i+1) = W^i * ReLU^i * X^i + b^i
 			for(k=0; k<D[i]; k++)
 				if(ReLU[indexOfs(i,k)])
 					X[indexOfs(i+1,j)] += W[indexOfW(i,j,k)] * X[indexOfs(i,k)];
-			//ReLU^i_j = 1 if X^i_j>0, 0 otherwise
+			// ReLU
 			if(X[indexOfs(i+1,j)] > 0) ReLU[indexOfs(i+1,j)] = 1;
 			else ReLU[indexOfs(i+1,j)] = 0;
 		}
@@ -1362,14 +1369,15 @@ void CTraining::CNNThreadFunc(int index)
 	
 	for(j=0; j<D[alpha]; j++)
 	{
-		X[indexOfs(alpha,j)] = b[indexOfb(C,j)];
 		// X^(i+1) = W^i * ReLU^i * X^i + b^i
+		X[indexOfs(alpha,j)] = b[indexOfb(C,j)];
 		for(k=0; k<D[C]; k++)
 			if(ReLU[indexOfs(C,k)])
 				X[indexOfs(alpha,j)] += W[indexOfW(C,j,k)] * X[indexOfs(C,k)];
-		//ReLU^i_j = 1 if X^i_j>0, 0 otherwise
+		// don't use ReLU for the final score layer
 		ReLU[indexOfs(alpha,j)] = 1;
 	}
+	// score fntion ended
 	
 	// initialize db and dW (for the case m=alpha-1)
 	for(i=0; i<D[alpha]; i++)
@@ -1410,66 +1418,68 @@ void CTraining::CNNThreadFunc(int index)
 		}
 	}
 	// computing gradients of FC Weights is done
-	
-	for(i=0; i<D[alpha] * sizeConvX[beta+1]; i++) ConvdX[i] = 0;
-	for(i=0; i<D[alpha] * sizeConvW[beta]; i++) ConvdW[i] = 0;
-	for(i=0; i<D[alpha] * sizeConvb[beta]; i++) Convdb[i] = 0;
-	// calculate initial gradient of convdX
-	for(u=0; u<D[alpha]; u++)
+	if(A)
 	{
-		tmp = indexOfConvdX(u,beta,0,0,0);
-		for(int v=0; v<D[0]; v++)
+		for(i=0; i<D[alpha] * sizeConvX[beta+1]; i++) ConvdX[i] = 0;
+		for(i=0; i<D[alpha] * sizeConvW[beta]; i++) ConvdW[i] = 0;
+		for(i=0; i<D[alpha] * sizeConvb[beta]; i++) Convdb[i] = 0;
+		// calculate initial gradient of convdX
+		for(u=0; u<D[alpha]; u++)
 		{
-			if(ReLU[indexOfs(0,v)])
-			for(i=0; i<D[1]; i++)
-				ConvdX[tmp+v] += db[indexOfdb(0,u,i)] * W[indexOfW(0,i,v)];
-		}
-	}
-	
-	// calculate gradient of CNN for general cases
-	for(m=beta-1; m>=0; m--)
-	{
-		// Pooling layer
-		if(B && !((m+1)%(A+1)))
-		{
-			for(I=0; I<width[m]; I++){
-			for(J=0; J<height[m]; j++){
-			for(k=0; k<depth[m]; k++)
+			tmp = indexOfConvdX(u,beta,0,0,0);
+			for(int v=0; v<D[0]; v++)
 			{
-				for(i2=(int)(I-F[m])/S[m] + 1; i2<(int)I/S[m]; i2++){
-				for(j2=(int)(J-F[m])/S[m] + 1; j2<(int)J/S[m]; j2++){
-				if(I==Pooledi[indexOfPool(m+1,i2,j2,k)] && J==Pooledj[indexOfPool(m+1,i2,j2,k)])
-				for(u=0; u<D[alpha]; u++)
-					ConvdX[indexOfConvdX(u,m,I,J,k)] += ConvdX[indexOfConvdX(u,m+1,i2,j2,k)];
-			}}}}}
+				if(ReLU[indexOfs(0,v)])
+				for(i=0; i<D[1]; i++)
+					ConvdX[tmp+v] += db[indexOfdb(0,u,i)] * W[indexOfW(0,i,v)];
+			}
 		}
-	
-		// Conv layer
-		else
+		
+		// calculate gradient of CNN for general cases
+		for(m=beta-1; m>=0; m--)
 		{
-			for(i2=0; i2<width[m+1]; i2++){
-			for(j2=0; j2<height[m+1]; j2++){
-			for(k2=0; k2<depth[m+1]; k2++)
+			// Pooling layer
+			if(B && !((m+1)%(A+1)))
 			{
-				for(i=0; i<F[m]; i++){
-				for(j=0; j<F[m]; j++){
+				for(I=0; I<width[m]; I++){
+				for(J=0; J<height[m]; j++){
 				for(k=0; k<depth[m]; k++)
 				{
-					I = i+i2*S[m]-P[m];
-					J = j+j2*S[m]-P[m];
-					if(I<0 || I>=width[m] || J<0 || J>=height[m]) continue;
-					if(ConvReLU[indexOfConvX(m,I,J,k)])
+					for(i2=(int)(I-F[m])/S[m] + 1; i2<(int)I/S[m]; i2++){
+					for(j2=(int)(J-F[m])/S[m] + 1; j2<(int)J/S[m]; j2++){
+					if(I==Pooledi[indexOfPool(m+1,i2,j2,k)] && J==Pooledj[indexOfPool(m+1,i2,j2,k)])
 					for(u=0; u<D[alpha]; u++)
+						ConvdX[indexOfConvdX(u,m,I,J,k)] += ConvdX[indexOfConvdX(u,m+1,i2,j2,k)];
+				}}}}}
+			}
+		
+			// Conv layer
+			else
+			{
+				for(i2=0; i2<width[m+1]; i2++){
+				for(j2=0; j2<height[m+1]; j2++){
+				for(k2=0; k2<depth[m+1]; k2++)
+				{
+					for(i=0; i<F[m]; i++){
+					for(j=0; j<F[m]; j++){
+					for(k=0; k<depth[m]; k++)
 					{
-						// ConvdX
-						ConvdX[indexOfConvdX(u,m,I,J,k)] += ConvdX[indexOfConvdX(u,m+1,i2,j2,k2)] * ConvW[indexOfConvW(m,k2,i,j,k)];
-						// ConvdW
-						ConvdW[indexOfConvdW(u,m,k2,i,j,k)] += ConvdX[indexOfConvdX(u,m+1,i2,j2,k2)] * ConvX[indexOfConvX(m,I,J,k)];
-					}
+						I = i+i2*S[m]-P[m];
+						J = j+j2*S[m]-P[m];
+						if(I<0 || I>=width[m] || J<0 || J>=height[m]) continue;
+						if(ConvReLU[indexOfConvX(m,I,J,k)])
+						for(u=0; u<D[alpha]; u++)
+						{
+							// ConvdX
+							ConvdX[indexOfConvdX(u,m,I,J,k)] += ConvdX[indexOfConvdX(u,m+1,i2,j2,k2)] * ConvW[indexOfConvW(m,k2,i,j,k)];
+							// ConvdW
+							ConvdW[indexOfConvdW(u,m,k2,i,j,k)] += ConvdX[indexOfConvdX(u,m+1,i2,j2,k2)] * ConvX[indexOfConvX(m,I,J,k)];
+						}
+					}}}
+					for(u=0; u<D[alpha]; u++)
+						Convdb[indexOfConvdb(u,m,k2)] += ConvdX[indexOfConvdX(u,m+1,i2,j2,k2)];
 				}}}
-				for(u=0; u<D[alpha]; u++)
-					Convdb[indexOfConvdb(u,m,k2)] += ConvdX[indexOfConvdX(u,m+1,i2,j2,k2)];
-			}}}
+			}
 		}
 	}
 	
@@ -1491,15 +1501,18 @@ void CTraining::CNNThreadFunc(int index)
 					dLdb[indexOfb(m,j)] += db[indexOfdb(m,u,j)] - db[indexOfdb(m,pData->y[index],j)];
 				}
 			}
-			for(m=0; m<beta; m++)
-			if(!B || ((m+1)%(A+1)))
-			for(k2=0; k2<depth[m+1]; k2++)
+			if(A)
 			{
-				for(i=0; i<F[m]; i++)
-				for(j=0; j<F[m]; j++)
-				for(k=0; k<depth[m]; k++)
-					ConvdLdW[indexOfConvW(m,k2,i,j,k)] += ConvdW[indexOfConvdW(u,m,k2,i,j,k)] - ConvdW[indexOfConvdW(pData->y[index],m,k2,i,j,k)];
-				ConvdLdb[indexOfConvb(m,k2)] += Convdb[indexOfConvdb(u,m,k2)] - Convdb[indexOfConvdb(pData->y[index],m,k2)];
+				for(m=0; m<beta; m++)
+				if(!B || ((m+1)%(A+1)))
+				for(k2=0; k2<depth[m+1]; k2++)
+				{
+					for(i=0; i<F[m]; i++)
+					for(j=0; j<F[m]; j++)
+					for(k=0; k<depth[m]; k++)
+						ConvdLdW[indexOfConvW(m,k2,i,j,k)] += ConvdW[indexOfConvdW(u,m,k2,i,j,k)] - ConvdW[indexOfConvdW(pData->y[index],m,k2,i,j,k)];
+					ConvdLdb[indexOfConvb(m,k2)] += Convdb[indexOfConvdb(u,m,k2)] - Convdb[indexOfConvdb(pData->y[index],m,k2)];
+				}
 			}
 		}
 	}
@@ -1516,121 +1529,6 @@ void CTraining::CNNThreadFunc(int index)
 	free(ConvdX);
 	free(ConvdW);
 	free(Convdb);
-}
-
-int CTraining::RNNThreadFunc(int index)
-{
-	int i,j,k,m,tmp;
-	// X^(i+1) = W^i * delta^i * X^i + b^i
-	double* X = (double*) malloc(sizeof(double) * sizes[alpha+1]);
-	// dW[indexOfW(m,i,j,k)] : ds^alpha_i / dW^m_j,k
-	double* dW = (double*) malloc(sizeof(double) * D[alpha] * sizeW[alpha]);
-	// db[sizeOfb(m,i,j)] : ds^alpha_i / db^m_j
-	// and this is exactly same as ds^alpha_i / ds^(m+1)_j mathematically
-	double* db = (double*) malloc(sizeof(double) * D[alpha] * sizeb[alpha]);
-	bool* ReLU = (bool*) malloc(sizeof(bool) * sizes[alpha+1]);
-	
-	// initialize score function and ReLU chronicle
-	for(j=0; j<D[0]; j++)
-	{
-		X[indexOfs(0,j)] = pData->x[index][j];	// initializing sBef = x_l
-		ReLU[indexOfs(0,j)] = 1;	// initializing first deltaBef
-	}
-	
-	// this loop is a procedure of score function
-	for(i=0; i<C; i++)
-	{
-		for(j=0; j<D[i+1]; j++)
-		{
-			X[indexOfs(i+1,j)] = b[indexOfb(i,j)];
-			// X^(i+1) = W^i * ReLU^i * X^i + b^i
-			for(k=0; k<D[i]; k++)
-				if(ReLU[indexOfs(i,k)])
-					X[indexOfs(i+1,j)] += W[indexOfW(i,j,k)] * X[indexOfs(i,k)];
-			//ReLU^i_j = 1 if X^i_j>0, 0 otherwise
-			if(X[indexOfs(i+1,j)] > 0) ReLU[indexOfs(i+1,j)] = 1;
-			else ReLU[indexOfs(i+1,j)] = 0;
-		}
-	}
-	
-	for(j=0; j<D[alpha]; j++)
-	{
-		X[indexOfs(alpha,j)] = b[indexOfb(C,j)];
-		// X^(i+1) = W^i * ReLU^i * X^i + b^i
-		for(k=0; k<D[C]; k++)
-			if(ReLU[indexOfs(C,k)])
-				X[indexOfs(alpha,j)] += W[indexOfW(C,j,k)] * X[indexOfs(C,k)];
-		//ReLU^i_j = 1 if X^i_j>0, 0 otherwise
-		ReLU[indexOfs(alpha,j)] = 1;
-	}
-	
-	// initialize db and dW (for the case m=alpha-1)
-	for(i=0; i<D[alpha]; i++)
-	{
-		for(j=0; j<D[alpha]; j++)
-		{
-			// ds^alpha_i / db^(alpha-1)_j = 1 if and only if i=j
-			// otherwise it becomes 0
-			if(i==j) db[indexOfdb(alpha-1,i,j)] = 1;
-			else db[indexOfdb(alpha-1,i,j)] = 0;
-			
-			for(k=0; k<D[alpha-1]; k++)
-				dW[indexOfdW(alpha-1,i,j,k)] = db[indexOfdb(alpha-1,i,j)] * X[indexOfs(alpha-1,k)];
-		}
-	}
-	
-	// calculating gradient for b,W in general
-	for(m=alpha-2; m>=0; m--)
-	{
-		for(i=0; i<D[alpha]; i++)
-		{
-			for(j=0; j<D[m+1]; j++)
-			{
-				// compute ds^alpha_i / db^m_j
-				// check up my blog for detail about how this comes
-				db[indexOfdb(m,i,j)] = 0;
-				if(ReLU[indexOfs(m+1,j)])
-					for(k=0; k<D[m+2]; k++)
-						db[indexOfdb(m,i,j)] += db[indexOfdb(m+1,i,k)] * W[indexOfW(m+1,k,j)];
-						
-				// compute ds^alpha_i / dW^m_j,k
-				for(k=0; k<D[m]; k++)
-				{
-					if(ReLU[indexOfs(m,k)]) dW[indexOfdW(m,i,j,k)] = db[indexOfdb(m,i,j)] * X[indexOfs(m,k)];
-					else dW[indexOfdW(m,i,j,k)] = 0;
-				}
-			}
-		}
-	}
-	
-	// this is a procedure of calculating loss function
-	// according to SVM and its gradient about W,b
-	// L_l = sig_i
-	for(i=0; i<D[alpha]; i++)
-	{
-		if(i == pData->y[index]) continue;
-		if((tmp = X[indexOfs(alpha,i)] - X[indexOfs(alpha,pData->y[index])] + DELTA) > 0)
-		{
-			L += tmp;
-			for(m=0; m<alpha; m++)
-			{
-				for(j=0; j<D[m+1]; j++)
-				{
-					for(k=0; k<D[m]; k++)
-						dLdW[indexOfW(m,j,k)] += dW[indexOfdW(m,i,j,k)] - dW[indexOfdW(m,pData->y[index],j,k)];
-					dLdb[indexOfb(m,j)] += db[indexOfdb(m,i,j)] - db[indexOfdb(m,pData->y[index],j)];
-				}
-			}
-		}
-	}
-	
-	// free memories used at this thread
-	free(dW);
-	free(db);
-	free(X);
-	free(ReLU);
-	
-	return 0;
 }
 
 int CTraining::Testindex()
