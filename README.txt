@@ -49,6 +49,5 @@ ver 2.2
 
 ver 2.2.1
    - CheckAccuracy function now supports multi-threading
-     but it occurs an error when it's RNN
    - Testindex function is newly added
      I checked there's no matter with indexing functions
