@@ -395,10 +395,10 @@ int CTraining::WeightLoad(char* argv)
 		fread(dLdb, sizeof(double), sizeb[alpha], fpWeight);
 		fread(vecdW, sizeof(double), sizeW[alpha], fpWeight);
 		fread(vecdb, sizeof(double), sizeb[alpha], fpWeight);
-		fread(ConvdLdW, sizeof(double), sizeW[beta], fpWeight);
-		fread(ConvdLdb, sizeof(double), sizeb[beta], fpWeight);
-		fread(vecConvdW, sizeof(double), sizeW[beta], fpWeight);
-		fread(vecConvdb, sizeof(double), sizeb[beta], fpWeight);
+		fread(ConvdLdW, sizeof(double), sizeConvW[beta], fpWeight);
+		fread(ConvdLdb, sizeof(double), sizeConvb[beta], fpWeight);
+		fread(vecConvdW, sizeof(double), sizeConvW[beta], fpWeight);
+		fread(vecConvdb, sizeof(double), sizeConvb[beta], fpWeight);
 	}
 	else err = ERR_NOTSUPPORTEDVERSION;
 	
@@ -515,7 +515,7 @@ int CTraining::indexOfConvb(int u, int v)
 int CTraining::indexOfPool(int m, int i, int j, int k)
 {
 	int ans, t;
-	t = m/(A+1);
+	t = m/(A+1) - 1;
 	ans = height[m]*k + j;
 	ans *= width[m];
 	ans += i + sizePool[t];
@@ -987,10 +987,10 @@ void CTraining::FileSave()
 	fwrite(dLdb, sizeof(double), sizeb[alpha], fpResult);
 	fwrite(vecdW, sizeof(double), sizeW[alpha], fpResult);
 	fwrite(vecdb, sizeof(double), sizeb[alpha], fpResult);
-	fwrite(ConvdLdW, sizeof(double), sizeW[beta], fpResult);
-	fwrite(ConvdLdb, sizeof(double), sizeb[beta], fpResult);
-	fwrite(vecConvdW, sizeof(double), sizeW[beta], fpResult);
-	fwrite(vecConvdb, sizeof(double), sizeb[beta], fpResult);
+	fwrite(ConvdLdW, sizeof(double), sizeConvW[beta], fpResult);
+	fwrite(ConvdLdb, sizeof(double), sizeConvb[beta], fpResult);
+	fwrite(vecConvdW, sizeof(double), sizeConvW[beta], fpResult);
+	fwrite(vecConvdb, sizeof(double), sizeConvb[beta], fpResult);
 	fclose(fpResult);
 }
 
@@ -1143,37 +1143,41 @@ int CTraining::CheckThreadFunc(int index)
 		{
 			// Pooling layer
 			if((B>0) && !((m+1)%(A+1)))
-			for(i2=0; i2<width[m+1]; i2++){
-			for(j2=0; j2<height[m+1]; j2++){
-			for(k2=0; k2<depth[m+1]; k2++)
 			{
-				ConvX[indexOfConvX(m+1,i2,j2,k2)] = 0;
-				for(I=i2*S[m]; I<i2*S[m]+F[m]; I++){
-				for(J=j2*S[m]; J<j2*S[m]+F[m]; J++){
-				if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < ConvX[indexOfConvX(m,I,J,k2)])
+				for(i2=0; i2<width[m+1]; i2++){
+				for(j2=0; j2<height[m+1]; j2++){
+				for(k2=0; k2<depth[m+1]; k2++)
 				{
-					ConvX[indexOfConvX(m+1,i2,j2,k2)] = ConvX[indexOfConvX(m,I,J,k2)];
+					ConvX[indexOfConvX(m+1,i2,j2,k2)] = 0;
+					for(I=i2*S[m]; I<i2*S[m]+F[m]; I++){
+					for(J=j2*S[m]; J<j2*S[m]+F[m]; J++){
+					if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < ConvX[indexOfConvX(m,I,J,k2)])
+					{
+						ConvX[indexOfConvX(m+1,i2,j2,k2)] = ConvX[indexOfConvX(m,I,J,k2)];
+					}}}
 				}}}
-			}}}
+			}
 			
 			// Conv layer
 			else
-			for(i2=0; i2<width[m+1]; i2++){
-			for(j2=0; j2<height[m+1]; j2++){
-			for(k2=0; k2<depth[m+1]; k2++)
 			{
-				ConvX[indexOfConvX(m+1,i2,j2,k2)] = Convb[indexOfConvb(m,k2)];
-				for(i=0; i<F[m]; i++){
-				for(j=0; j<F[m]; j++){
-				for(k=0; k<depth[m]; k++)
+				for(i2=0; i2<width[m+1]; i2++){
+				for(j2=0; j2<height[m+1]; j2++){
+				for(k2=0; k2<depth[m+1]; k2++)
 				{
-					I = i+i2*S[m]-P[m];
-					J = j+j2*S[m]-P[m];
-					if(I<0 || I>=width[m] || J<0 || J>=height[m]) continue;
-						ConvX[indexOfConvX(m+1,i2,j2,k2)] += ConvX[indexOfConvX(m,I,J,k)] * ConvW[indexOfConvW(m,k2,i,j,k)];
+					ConvX[indexOfConvX(m+1,i2,j2,k2)] = Convb[indexOfConvb(m,k2)];
+					for(i=0; i<F[m]; i++){
+					for(j=0; j<F[m]; j++){
+					for(k=0; k<depth[m]; k++)
+					{
+						I = i+i2*S[m]-P[m];
+						J = j+j2*S[m]-P[m];
+						if(I<0 || I>=width[m] || J<0 || J>=height[m]) continue;
+							ConvX[indexOfConvX(m+1,i2,j2,k2)] += ConvX[indexOfConvX(m,I,J,k)] * ConvW[indexOfConvW(m,k2,i,j,k)];
+					}}}
+					if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < 0) ConvX[indexOfConvX(m+1,i2,j2,k2)] = 0;
 				}}}
-				if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < 0) ConvX[indexOfConvX(m+1,i2,j2,k2)] = 0;
-			}}}
+			}
 		}
 		// Conv & Pool layer ended
 		
@@ -1296,41 +1300,45 @@ void CTraining::CNNThreadFunc(int index)
 		{
 			// Pooling layer
 			if((B>0) && !((m+1)%(A+1)))
-			for(i2=0; i2<width[m+1]; i2++){
-			for(j2=0; j2<height[m+1]; j2++){
-			for(k2=0; k2<depth[m+1]; k2++)
 			{
-				ConvX[indexOfConvX(m+1,i2,j2,k2)] = 0;
-				for(I=i2*S[m]; I<i2*S[m]+F[m]; I++){
-				for(J=j2*S[m]; J<j2*S[m]+F[m]; J++){
-				if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < ConvX[indexOfConvX(m,I,J,k2)])
+				for(i2=0; i2<width[m+1]; i2++){
+				for(j2=0; j2<height[m+1]; j2++){
+				for(k2=0; k2<depth[m+1]; k2++)
 				{
-					ConvX[indexOfConvX(m+1,i2,j2,k2)] = ConvX[indexOfConvX(m,I,J,k2)];
-					Pooledi[indexOfPool(m+1,i2,j2,k2)] = I;
-					Pooledj[indexOfPool(m+1,i2,j2,k2)] = J;
+					ConvX[indexOfConvX(m+1,i2,j2,k2)] = 0;
+					for(I=i2*S[m]; I<i2*S[m]+F[m]; I++){
+					for(J=j2*S[m]; J<j2*S[m]+F[m]; J++){
+					if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < ConvX[indexOfConvX(m,I,J,k2)])
+					{
+						ConvX[indexOfConvX(m+1,i2,j2,k2)] = ConvX[indexOfConvX(m,I,J,k2)];
+						Pooledi[indexOfPool(m+1,i2,j2,k2)] = I;
+						Pooledj[indexOfPool(m+1,i2,j2,k2)] = J;
+					}}}
 				}}}
-			}}}
+			}
 			
 			// Conv layer
 			else
-			for(i2=0; i2<width[m+1]; i2++){
-			for(j2=0; j2<height[m+1]; j2++){
-			for(k2=0; k2<depth[m+1]; k2++)
 			{
-				ConvX[indexOfConvX(m+1,i2,j2,k2)] = Convb[indexOfConvb(m,k2)];
-				for(i=0; i<F[m]; i++){
-				for(j=0; j<F[m]; j++){
-				for(k=0; k<depth[m]; k++)
+				for(i2=0; i2<width[m+1]; i2++){
+				for(j2=0; j2<height[m+1]; j2++){
+				for(k2=0; k2<depth[m+1]; k2++)
 				{
-					I = i+i2*S[m]-P[m];
-					J = j+j2*S[m]-P[m];
-					if(I<0 || I>=width[m] || J<0 || J>=height[m]) continue;
-					if(ConvReLU[indexOfConvX(m,I,J,k)])
-						ConvX[indexOfConvX(m+1,i2,j2,k2)] += ConvX[indexOfConvX(m,I,J,k)] * ConvW[indexOfConvW(m,k2,i,j,k)];
+					ConvX[indexOfConvX(m+1,i2,j2,k2)] = Convb[indexOfConvb(m,k2)];
+					for(i=0; i<F[m]; i++){
+					for(j=0; j<F[m]; j++){
+					for(k=0; k<depth[m]; k++)
+					{
+						I = i+i2*S[m]-P[m];
+						J = j+j2*S[m]-P[m];
+						if(I<0 || I>=width[m] || J<0 || J>=height[m]) continue;
+						if(ConvReLU[indexOfConvX(m,I,J,k)])
+							ConvX[indexOfConvX(m+1,i2,j2,k2)] += ConvX[indexOfConvX(m,I,J,k)] * ConvW[indexOfConvW(m,k2,i,j,k)];
+					}}}
+					if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < 0) ConvReLU[indexOfConvX(m+1,i2,j2,k2)] = 0;
+					else ConvReLU[indexOfConvX(m+1,i2,j2,k2)] = 1;
 				}}}
-				if(ConvX[indexOfConvX(m+1,i2,j2,k2)] < 0) ConvReLU[indexOfConvX(m+1,i2,j2,k2)] = 0;
-				else ConvReLU[indexOfConvX(m+1,i2,j2,k2)] = 1;
-			}}}
+			}
 		}
 		// Conv & Pool layer ended
 		// initiate FC layer
@@ -1441,15 +1449,15 @@ void CTraining::CNNThreadFunc(int index)
 			// Pooling layer
 			if(B && !((m+1)%(A+1)))
 			{
-				for(I=0; I<width[m]; I++){
-				for(J=0; J<height[m]; j++){
+				for(i2=0; i2<width[m+1]; i2++){
+				for(j2=0; j2<height[m+1]; j2++){
 				for(k=0; k<depth[m]; k++)
 				{
-					for(i2=(int)(I-F[m])/S[m] + 1; i2<(int)I/S[m]; i2++){
-					for(j2=(int)(J-F[m])/S[m] + 1; j2<(int)J/S[m]; j2++){
+					for(I=i2*S[m]; I<i2*S[m]+F[m]; I++){
+					for(J=j2*S[m]; J<j2*S[m]+F[m]; J++){
 					if(I==Pooledi[indexOfPool(m+1,i2,j2,k)] && J==Pooledj[indexOfPool(m+1,i2,j2,k)])
-					for(u=0; u<D[alpha]; u++)
-						ConvdX[indexOfConvdX(u,m,I,J,k)] += ConvdX[indexOfConvdX(u,m+1,i2,j2,k)];
+						for(u=0; u<D[alpha]; u++)
+							ConvdX[indexOfConvdX(u,m,I,J,k)] += ConvdX[indexOfConvdX(u,m+1,i2,j2,k)];
 				}}}}}
 			}
 		

@@ -90,7 +90,7 @@ int main(int argc, char* argv[])
 		{
 			printf("start testing procedure...");
 			Try = hTrain.CheckAccuracy(1);
-			printf("accuracy : %2.2lf%%!\n", Try);
+			printf("\naccuracy : %2.2lf%%!\n", Try);
 			system("pause");
 			return err;
 		}
